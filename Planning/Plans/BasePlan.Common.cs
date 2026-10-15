@@ -376,6 +376,11 @@ namespace CompanionAI_v3.Planning.Plans
         /// </summary>
         protected float CalculateTurnEndingReservedAP(Situation situation)
         {
+            // Extra turns grant only 1-2 AP. Reserving it for a turn-ending ability
+            // blocks the attack loop entirely, so the unit ends the extra turn idle.
+            if (situation.IsExtraTurn)
+                return 0f;
+
             if (situation.AvailableBuffs == null || situation.AvailableBuffs.Count == 0)
                 return 0f;
 
@@ -478,7 +483,7 @@ namespace CompanionAI_v3.Planning.Plans
 
             if (previousValid)
             {
-                budget.StrategyPostActionReserved = strategy.ReservedAPForPostAction;
+                budget.StrategyPostActionReserved = situation.IsExtraTurn ? 0f : strategy.ReservedAPForPostAction;
                 Log.Planning.Info($"[{roleTag}] Strategy: Reusing previous ({strategy.Sequence}, dmg={strategy.ExpectedTotalDamage:F0})");
                 return strategy;
             }
@@ -497,7 +502,7 @@ namespace CompanionAI_v3.Planning.Plans
                         : strategy.ShouldPrioritizeAoE ? "AoE" : "Attack";
                     turnState.SetContext(StrategicContextKeys.TacticalObjective, objective);
 
-                    budget.StrategyPostActionReserved = strategy.ReservedAPForPostAction;
+                    budget.StrategyPostActionReserved = situation.IsExtraTurn ? 0f : strategy.ReservedAPForPostAction;
                     Log.Planning.Info($"[{roleTag}] Strategy: {strategy.Sequence} (dmg={strategy.ExpectedTotalDamage:F0}, objective={objective})");
                 }
                 return strategy;
