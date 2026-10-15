@@ -1090,7 +1090,7 @@ namespace CompanionAI_v3.Planning.Plans
             }
 
             // ★ v3.8.74: Phase 8.7 - Tactical Reposition (공격 쿨다운 시 다음 턴 최적 위치)
-            if (!hasMoveAfterPhase8 && noAttackNoApproach && remainingMP > 0 && situation.HasLivingEnemies)
+            if (!hasMoveAfterPhase8 && (noAttackNoApproach || situation.IsMovementOnlyExtraTurn) && remainingMP > 0 && situation.HasLivingEnemies)
             {
                 var tacticalRepos = PlanTacticalReposition(situation, remainingMP);
                 if (tacticalRepos != null)

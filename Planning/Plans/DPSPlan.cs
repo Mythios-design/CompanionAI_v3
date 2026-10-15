@@ -1181,7 +1181,7 @@ namespace CompanionAI_v3.Planning.Plans
             // 조건: 이동 없음 + 원거리 + 모든 공격 쿨다운 + MP 있음
             // Phase 8 (접근 이동)과 Phase 8.5 (안전 후퇴) 모두 실행되지 않은 경우의 안전망
             // ★ v3.111.13: ExtraTurn 가드 MovementPlanner.PlanTacticalReposition로 push-down됨.
-            if (!hasMoveInPlan && noAttackNoApproach && remainingMP > 0 && situation.HasLivingEnemies)
+            if (!hasMoveInPlan && (noAttackNoApproach || situation.IsMovementOnlyExtraTurn) && remainingMP > 0 && situation.HasLivingEnemies)
             {
                 var tacticalRepos = PlanTacticalReposition(situation, remainingMP);
                 if (tacticalRepos != null)

@@ -619,7 +619,7 @@ namespace CompanionAI_v3.Planning.Plans
 
             // ★ v3.8.74: Phase 8.7 - Tactical Reposition (공격 쿨다운 시 다음 턴 최적 위치)
             // ★ v3.111.13: ExtraTurn 가드 MovementPlanner.PlanTacticalReposition로 push-down됨.
-            if (!hasMoveInPlan && noAttackNoApproach && remainingMP > 0 && situation.HasLivingEnemies)
+            if (!hasMoveInPlan && (noAttackNoApproach || situation.IsMovementOnlyExtraTurn) && remainingMP > 0 && situation.HasLivingEnemies)
             {
                 var tacticalRepos = PlanTacticalReposition(situation, remainingMP);
                 if (tacticalRepos != null)

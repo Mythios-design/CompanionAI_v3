@@ -1374,7 +1374,8 @@ namespace CompanionAI_v3.Planning.Planners
             if (remainingMP <= 0) return null;
             // ★ v3.111.13: 임시턴 스킵 — MP=0 → 잘못된 위치로 이동하는 버그 방지.
             //   v3.111.9 sprinkle(DPS:1149, Support:619) push-down.
-            if (situation.IsExtraTurn)
+            // Movement-only extra turns are the exception: moving is all the unit can do.
+            if (situation.IsExtraTurn && !situation.IsMovementOnlyExtraTurn)
             {
                 if (Main.IsDebugEnabled) Log.Planning.Debug($"[MovementPlanner] {situation.Unit?.CharacterName}: PlanTacticalReposition — skip (extra turn)");
                 return null;

@@ -41,6 +41,12 @@ namespace CompanionAI_v3.Analysis
         /// </summary>
         public bool IsExtraTurn { get; set; }
 
+        /// <summary>
+        /// Extra turn that grants movement but no usable AP (e.g. Officer's "Move, Move, Move!").
+        /// Repositioning is the only useful thing to do, so the extra-turn movement skips must not apply.
+        /// </summary>
+        public bool IsMovementOnlyExtraTurn => IsExtraTurn && CurrentAP < 1f && CurrentMP > 0f;
+
         #endregion
 
         #region Settings
