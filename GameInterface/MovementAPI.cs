@@ -33,6 +33,8 @@ namespace CompanionAI_v3.GameInterface
         private const float WEIGHT_AOO = 100f;           // 기회공격 유발
         private const float WEIGHT_AOE_ENTRY = 80f;      // AoE 진입
         private const float WEIGHT_DAMAGING_AOE_STEP = 60f;  // 데미지 AoE 내 이동
+        /// <summary>Per melee enemy that can reach a tile next turn (PreferRanged positioning). About the value of hitting two to three extra targets from that tile.</summary>
+        private const float MELEE_REACH_PENALTY = 40f;
 
         #endregion
 

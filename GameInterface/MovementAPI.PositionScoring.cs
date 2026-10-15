@@ -140,12 +140,18 @@ namespace CompanionAI_v3.GameInterface
                                        - ExposureScore
                                        + HideScore  // ★ v3.110.19 Phase 1a
                                        - (EnemyTurnThreatSum * 8f)  // ★ v3.110.20 Phase 2
+                                       - MeleeReachPenalty    // melee enemies that can reach this tile next turn (PreferRanged)
                                        + StayingAwayBonus  // ★ v3.110.22 Phase 4
                                        + AoeHitCountBonus  // ★ v3.116.8 옵션 B: ranged AoE coverage
                                        + PriorityTargetBonus  // ★ v3.116.14 Path C
                                        + LowHPTargetBonus     // ★ v3.116.14 Path C
                                        + BodyGuardBonus       // ★ v3.116.14 Path C
                                        + AllyProtectionBonus; // Phase 4-full
+
+            /// <summary>Melee enemies able to move next to this tile and hit on their next turn (PreferRanged units only).</summary>
+            public int MeleeReachCount { get; set; }
+            /// <summary>MeleeReachCount × weight; subtracted from TotalScore.</summary>
+            public float MeleeReachPenalty { get; set; }
 
             public bool CanStand { get; set; }
             public bool HasLosToEnemy { get; set; }

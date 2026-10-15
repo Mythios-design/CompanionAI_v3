@@ -663,6 +663,19 @@ namespace CompanionAI_v3.GameInterface
             }
             score.StayingAwayBonus = score.StayingAwayScore * stayingWeight;
 
+            // Ranged characters should not end their move where a melee enemy can walk up and hit them next turn.
+            // The general turn-threat term above treats every enemy alike (a gunner who can already shoot you
+            // counts the same as a melee enemy who must close in), so melee reach gets its own, heavier penalty.
+            if (goal == MovementGoal.RangedAttackPosition || goal == MovementGoal.Retreat
+                || goal == MovementGoal.FindCover || goal == MovementGoal.MaintainDistance)
+            {
+                if (CombatAPI.GetRangePreference(unit) == Settings.RangePreference.PreferRanged)
+                {
+                    score.MeleeReachCount = CombatAPI.CountMeleeEnemiesThatCanReach(unit, node.Vector3Position, enemies);
+                    score.MeleeReachPenalty = score.MeleeReachCount * MELEE_REACH_PENALTY;
+                }
+            }
+
             switch (goal)
             {
                 case MovementGoal.FindCover:

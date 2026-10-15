@@ -506,9 +506,20 @@ namespace CompanionAI_v3.GameInterface
             // ★ Tier 1: hittable-optimal (DistanceScore >= 20) OR hittable-safe (HideFullRatio >= 0.8 + DistanceScore > 0).
             // Hide-safe 분기는 Argenta 케이스 같은 "Tier 2 노출 폴백" 차단용 — 안전한 hittable 자리가
             // 있는데 DistanceScore 만 부족해서 Tier 2 로 떨어져 노출 타일이 선택되는 결함 방지.
+            // Ranged characters: if any attack tile exists that no melee enemy can reach next turn, only consider
+            // such tiles. Otherwise the tiers below would pick a better-scoring tile a melee enemy can walk up to.
+            // (MeleeReachCount is only filled in for PreferRanged units, so others are unaffected.)
+            bool meleeSafeHittableExists = scores.Any(s => s.CanStand && s.HittableEnemyCount > 0
+                && s.DistanceScore >= 0f && s.MeleeReachCount == 0);
+            bool meleeSafeLosExists = scores.Any(s => s.CanStand && s.HasLosToEnemy
+                && s.DistanceScore >= 0f && s.MeleeReachCount == 0);
+            bool anyMeleeReach = scores.Any(s => s.MeleeReachCount > 0);
+            bool restrictHittable = anyMeleeReach && meleeSafeHittableExists;
+            bool restrictLos = anyMeleeReach && meleeSafeLosExists;
+
             const float HIDE_SAFE_RATIO = 0.8f;  // 80% 적이 ≥Full LOS 차단되는 자리 = 안전
             var best = CollectionHelper.MaxByWhere(scores,
-                s => s.CanStand && s.HittableEnemyCount > 0
+                s => s.CanStand && s.HittableEnemyCount > 0 && (!restrictHittable || s.MeleeReachCount == 0)
                      && (s.DistanceScore >= 20f
                          || (s.HideFullRatio >= HIDE_SAFE_RATIO && s.DistanceScore > 0f)),
                 s => s.TotalScore);
@@ -518,7 +529,7 @@ namespace CompanionAI_v3.GameInterface
             if (best == null)
             {
                 best = CollectionHelper.MaxByWhere(scores,
-                    s => s.CanStand && s.HittableEnemyCount > 0 && s.DistanceScore > 0f,
+                    s => s.CanStand && s.HittableEnemyCount > 0 && (!restrictHittable || s.MeleeReachCount == 0) && s.DistanceScore > 0f,
                     s => s.TotalScore);
                 if (best != null) selectedBy = "hittable-close";
             }
@@ -530,7 +541,7 @@ namespace CompanionAI_v3.GameInterface
             if (best == null)
             {
                 best = CollectionHelper.MaxByWhere(scores,
-                    s => s.CanStand && s.HittableEnemyCount > 0 && s.DistanceScore >= 0f,
+                    s => s.CanStand && s.HittableEnemyCount > 0 && (!restrictHittable || s.MeleeReachCount == 0) && s.DistanceScore >= 0f,
                     s => s.TotalScore);
                 if (best != null) selectedBy = "hittable-risky";
             }
@@ -540,7 +551,7 @@ namespace CompanionAI_v3.GameInterface
             {
                 if (Main.IsDebugEnabled) Log.Engine.Debug($"[MovementAPI] {unit.CharacterName}: No hittable position found, fallback to LOS-based");
                 best = CollectionHelper.MaxByWhere(scores,
-                    s => s.CanStand && s.HasLosToEnemy && s.DistanceScore >= 20f,
+                    s => s.CanStand && s.HasLosToEnemy && (!restrictLos || s.MeleeReachCount == 0) && s.DistanceScore >= 20f,
                     s => s.TotalScore);
                 if (best != null) selectedBy = "los-optimal";
             }
@@ -549,7 +560,7 @@ namespace CompanionAI_v3.GameInterface
             if (best == null)
             {
                 best = CollectionHelper.MaxByWhere(scores,
-                    s => s.CanStand && s.HasLosToEnemy && s.DistanceScore >= 0f,
+                    s => s.CanStand && s.HasLosToEnemy && (!restrictLos || s.MeleeReachCount == 0) && s.DistanceScore >= 0f,
                     s => s.TotalScore);
                 if (best != null) selectedBy = "los-risky";
             }
@@ -567,7 +578,7 @@ namespace CompanionAI_v3.GameInterface
                     if (d < nearestDist) { nearestDist = d; nearestEnemy = e; }
                 }
                 float nearestTiles = nearestEnemy != null ? CombatAPI.MetersToTiles(nearestDist) : 0f;
-                Log.Engine.Info($"[MovementAPI] FindRangedAttackPosition: Best=({best.Position.x:F1},{best.Position.z:F1}), score={best.TotalScore:F1}, nearestDist={nearestTiles:F1}t ({nearestEnemy?.CharacterName ?? "?"}), hittable={best.HittableEnemyCount}, cover={best.BestCover}, enemyLoS={(best.HasLosToEnemy ? 1 : 0)}, selectedBy={selectedBy}");
+                Log.Engine.Info($"[MovementAPI] FindRangedAttackPosition: Best=({best.Position.x:F1},{best.Position.z:F1}), score={best.TotalScore:F1}, nearestDist={nearestTiles:F1}t ({nearestEnemy?.CharacterName ?? "?"}), hittable={best.HittableEnemyCount}, cover={best.BestCover}, enemyLoS={(best.HasLosToEnemy ? 1 : 0)}, meleeReach={best.MeleeReachCount}{(restrictHittable || restrictLos ? " (melee-safe tiles only)" : "")}, selectedBy={selectedBy}");
 
                 // ★ v3.110.8: 점수 컴포넌트 브레이크다운 — 어느 축이 최종 선택을 좌우했는지 진단용
                 // 목적: DistanceScore 수정(0.6→0.5)의 효과가 다른 축에 상쇄되는지 확인
@@ -895,6 +906,7 @@ namespace CompanionAI_v3.GameInterface
             FindRetreatCacheMisses++;
 
             PositionScore _retreatResultBest = null;
+            bool preferRangedForMeleeReach = CombatAPI.GetRangePreference(unit) == Settings.RangePreference.PreferRanged;
             try {
             // ★ v3.8.13: AI용 패스파인딩 사용 - 경로 위협 데이터 포함
             var tiles = predictedMP > 0
@@ -1100,6 +1112,13 @@ namespace CompanionAI_v3.GameInterface
                 {
                     // 무기 사거리 내인데 LOS 없음 → 실질적으로 무가치한 위치
                     score.AttackScore = -25f;
+                }
+
+                // Same melee-reach penalty as EvaluatePosition: don't retreat to where a melee enemy can still reach.
+                if (preferRangedForMeleeReach)
+                {
+                    score.MeleeReachCount = CombatAPI.CountMeleeEnemiesThatCanReach(unit, pos, enemies);
+                    score.MeleeReachPenalty = score.MeleeReachCount * MELEE_REACH_PENALTY;
                 }
 
                 candidates.Add(score);

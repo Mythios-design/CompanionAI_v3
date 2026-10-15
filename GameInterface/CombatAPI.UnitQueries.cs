@@ -123,7 +123,84 @@ namespace CompanionAI_v3.GameInterface
             = new Dictionary<BaseUnitEntity, int>();
 
         /// <summary>★ v3.111.18: 턴 시작 시 CombatCache.ClearAll()에서 호출.</summary>
-        public static void ClearEnemyThreatRangeCache() => _enemyThreatRangeCache.Clear();
+        public static void ClearEnemyThreatRangeCache()
+        {
+            _enemyThreatRangeCache.Clear();
+            _enemyMeleeReachCache.Clear();
+        }
+
+        /// <summary>Per enemy: melee reach in cells for its next turn (move cells + melee weapon range), or -1 if not a melee threat.</summary>
+        private static readonly Dictionary<BaseUnitEntity, int> _enemyMeleeReachCache = new Dictionary<BaseUnitEntity, int>();
+
+        /// <summary>
+        /// How far (in cells, edge to edge) this enemy can be from a target and still hit it in melee on its next
+        /// turn: full next-turn movement plus melee weapon reach. -1 when the enemy is not a melee threat
+        /// (no melee weapon in hand and the game does not treat it as a melee unit).
+        /// Straight-line estimate: walls can make the real walk longer, so this errs on the side of caution.
+        /// </summary>
+        public static int GetEnemyNextTurnMeleeReachCells(BaseUnitEntity enemy)
+        {
+            if (enemy == null) return -1;
+            if (_enemyMeleeReachCache.TryGetValue(enemy, out int cached)) return cached;
+
+            int result = -1;
+            try
+            {
+                int meleeRange = 0;
+                var primary = enemy.Body?.PrimaryHand;
+                var secondary = enemy.Body?.SecondaryHand;
+                if (primary?.HasWeapon == true && primary.Weapon.Blueprint.IsMelee)
+                    meleeRange = Math.Max(meleeRange, primary.Weapon.AttackRange);
+                if (secondary?.HasWeapon == true && secondary.Weapon.Blueprint.IsMelee)
+                    meleeRange = Math.Max(meleeRange, secondary.Weapon.AttackRange);
+
+                bool usualMelee = enemy.Brain?.IsUsualMeleeUnit ?? false;
+                if (meleeRange <= 0 && usualMelee) meleeRange = 1;  // natural weapons / claws
+
+                if (meleeRange > 0 && meleeRange < 100)
+                {
+                    float maxMP = 0f;
+                    var initialAP = enemy.CombatState?.WarhammerInitialAPBlue;
+                    if (initialAP != null) maxMP = (float)initialAP.ModifiedValue;
+                    else if (enemy.Blueprint != null) maxMP = enemy.Blueprint.WarhammerInitialAPBlue;
+                    float costPerCell = Math.Max(1f, enemy.Blueprint?.WarhammerMovementApPerCell ?? 1f);
+                    int moveCells = (int)(maxMP / costPerCell);
+                    result = moveCells + meleeRange;
+                }
+            }
+            catch (Exception ex)
+            {
+                if (Main.IsDebugEnabled) Log.Engine.Warn($"[CombatAPI] GetEnemyNextTurnMeleeReachCells failed for {enemy?.CharacterName}: {ex.Message}");
+            }
+
+            _enemyMeleeReachCache[enemy] = result;
+            return result;
+        }
+
+        /// <summary>Number of melee enemies that could reach and hit `self` standing at `position` on their next turn.</summary>
+        public static int CountMeleeEnemiesThatCanReach(BaseUnitEntity self, UnityEngine.Vector3 position, List<BaseUnitEntity> enemies)
+        {
+            if (self == null || enemies == null) return 0;
+            int count = 0;
+            foreach (var enemy in enemies)
+            {
+                if (enemy == null || enemy.LifeState.IsDead || !enemy.IsConscious) continue;
+                int reach = GetEnemyNextTurnMeleeReachCells(enemy);
+                if (reach < 0) continue;
+                try
+                {
+                    int dist = Kingmaker.Utility.WarhammerGeometryUtils.DistanceToInCells(
+                        position, self.SizeRect, self.Forward,
+                        enemy.Position, enemy.SizeRect, enemy.Forward);
+                    if (dist <= reach) count++;
+                }
+                catch (Exception ex)
+                {
+                    if (Main.IsDebugEnabled) Log.Engine.Warn($"[CombatAPI] CountMeleeEnemiesThatCanReach distance failed: {ex.Message}");
+                }
+            }
+            return count;
+        }
 
         /// <summary>
         /// ★ v3.110.20: 적의 위협 사거리 (타일 단위).
