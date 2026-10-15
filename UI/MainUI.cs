@@ -4,6 +4,7 @@ using System.Linq;
 using Kingmaker;
 using Kingmaker.EntitySystem.Entities;
 using UnityEngine;
+using Newtonsoft.Json;
 using CompanionAI_v3.Data;
 using CompanionAI_v3.Diagnostics;
 using CompanionAI_v3.Settings;
@@ -1749,9 +1750,22 @@ namespace CompanionAI_v3.UI
 
             if (isSelected && _editingSettings != null)
             {
+                // Always edit the live settings object. A copy taken earlier goes stale after a save is
+                // loaded (settings are re-read from file), and edits to it would be silently lost.
+                _editingSettings = settings;
+
+                // Save immediately when anything in the panel changes, not only on the next game save,
+                // so a death-and-reload can't lose it. Only checked on input events, not every repaint.
+                var evt = Event.current?.type ?? EventType.Repaint;
+                bool isInput = evt != EventType.Repaint && evt != EventType.Layout;
+                string before = isInput ? JsonConvert.SerializeObject(_editingSettings) : null;
+
                 GUILayout.BeginVertical(UIStyles.SectionBox);
                 DrawCharacterAISettings();
                 GUILayout.EndVertical();
+
+                if (isInput && before != JsonConvert.SerializeObject(_editingSettings))
+                    Main.Settings.SaveCharacterSettings();
             }
         }
 

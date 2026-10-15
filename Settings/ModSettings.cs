@@ -206,6 +206,10 @@ namespace CompanionAI_v3.Settings
                         int prunedOnLoad = PruneUninformativeEntries(_cached.CharacterSettings);
                         Log.Persistence.Info($"[PerSaveSettings] Loaded {_cached.CharacterSettings?.Count ?? 0} settings from {Path.GetFileName(filePath)} (GameId={gameId})" +
                             (prunedOnLoad > 0 ? $" — {prunedOnLoad} 개 무정보 항목 제거됨(다음 저장 시 파일에 반영)" : ""));
+                        var aiOn = new List<string>();
+                        foreach (var cs in _cached.CharacterSettings.Values)
+                            if (cs != null && cs.EnableCustomAI && !string.IsNullOrEmpty(cs.CharacterName)) aiOn.Add(cs.CharacterName);
+                        Log.Persistence.Info($"[PerSaveSettings] AI enabled for: {(aiOn.Count > 0 ? string.Join(", ", aiOn) : "nobody")}");
                     }
                 }
                 else
@@ -322,6 +326,14 @@ namespace CompanionAI_v3.Settings
                 }
 
                 if (_cached == null) return;
+
+                // Never write settings that were not loaded for this playthrough (e.g. the empty placeholder
+                // used while no save is loaded) over the real file.
+                if (_currentGameId != gameId)
+                {
+                    Log.Persistence.Warn($"[PerSaveSettings] Save skipped — in-memory settings belong to GameId={_currentGameId ?? "none"}, not {gameId}");
+                    return;
+                }
 
                 int pruned = PruneUninformativeEntries(_cached.CharacterSettings);
                 if (pruned > 0)
