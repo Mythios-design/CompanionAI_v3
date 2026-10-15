@@ -449,7 +449,149 @@ namespace CompanionAI_v3.Planning.Planners
                 }
             }
 
+            var chargeApproach = PlanChargeApproach(situation, target, gapClosers, ref remainingAP, ref remainingMP, roleName);
+            if (chargeApproach != null) return chargeApproach;
+
             if (Main.IsDebugEnabled) Log.Planning.Debug($"[{roleName}] PlanGapCloser: All GapClosers failed on all targets");
+            return null;
+        }
+
+        /// <summary>
+        /// Charge-style gap closers (e.g. Charge) target an enemy, but the game also lets them target a
+        /// location. When every enemy is beyond charge range and too far to reach on foot, charge to the
+        /// reachable spot closest to the enemy so the unit closes distance instead of idling.
+        /// Only used when the game reports the ability can target a point and accepts the chosen spot.
+        /// </summary>
+        private static PlannedAction PlanChargeApproach(Situation situation, BaseUnitEntity preferredTarget,
+            List<AbilityData> gapClosers, ref float remainingAP, ref float remainingMP, string roleName,
+            Vector3? plannedWalkDestination = null)
+        {
+            var unit = situation.Unit;
+            float meleeRange = GetUnitMeleeRange(unit);
+
+            // A walk is already planned this turn: spots are measured from the current position,
+            // so they would be wrong after the walk. Let the walk happen; next turn can charge.
+            if (!plannedWalkDestination.HasValue && remainingMP < situation.CurrentMP - 0.01f) return null;
+
+            BaseUnitEntity target = preferredTarget;
+            if (target == null || !target.IsConscious || CombatAPI.IsTargetImmuneToDamage(target, unit))
+                target = situation.NearestEnemy;
+            if (target == null || !target.IsConscious) return null;
+
+            float distToTarget = CombatCache.GetDistanceInTiles(unit, target);
+            if (!plannedWalkDestination.HasValue && distToTarget <= remainingMP + meleeRange)
+            {
+                if (Main.IsDebugEnabled) Log.Planning.Debug($"[{roleName}] ChargeApproach: {target.CharacterName} reachable on foot ({distToTarget:F1} <= MP {remainingMP:F1} + melee {meleeRange:F1}) — walking instead");
+                return null;
+            }
+
+            foreach (var gapCloser in gapClosers)
+            {
+                var info = AbilityDatabase.GetInfo(gapCloser);
+                if (info != null && (info.Flags & AbilityFlags.PointTarget) != 0) continue;  // handled by jump logic above
+                if (gapCloser.Blueprint == null || !gapCloser.Blueprint.CanTargetPoint) continue;
+
+                float cost = CombatAPI.GetAbilityAPCost(gapCloser);
+                if (cost > remainingAP) continue;
+                if (info?.HPThreshold > 0 && situation.HPPercent < info.HPThreshold) continue;
+
+                var landing = FindChargeApproachPosition(unit, target, gapCloser, situation, out float landingDist);
+                if (!landing.HasValue)
+                {
+                    if (Main.IsDebugEnabled) Log.Planning.Debug($"[{roleName}] ChargeApproach: {gapCloser.Name} — no valid spot toward {target.CharacterName}");
+                    continue;
+                }
+
+                // Only worth it if the charge gets closer than walking would.
+                float walkingDist = plannedWalkDestination.HasValue
+                    ? CombatAPI.MetersToTiles(Vector3.Distance(plannedWalkDestination.Value, target.Position))
+                    : Math.Max(0f, distToTarget - remainingMP);
+                if (landingDist >= walkingDist)
+                {
+                    if (Main.IsDebugEnabled) Log.Planning.Debug($"[{roleName}] ChargeApproach: {gapCloser.Name} lands {landingDist:F1}t away, walking gets {walkingDist:F1}t — walking instead");
+                    continue;
+                }
+
+                remainingAP -= cost;
+                remainingMP = 0f;
+                Log.Planning.Info($"[{roleName}] Charge approach: {gapCloser.Name} -> spot {landingDist:F1}t from {target.CharacterName} (was {distToTarget:F1}t, AP:{cost:F1})");
+                return PlannedAction.PositionalAttack(gapCloser, landing.Value, $"Charge toward {target.CharacterName}", cost,
+                    requiresEnemyOccupancy: false);
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Used when the plan would only walk toward enemies it cannot reach this turn: returns a Charge
+        /// to a spot closer to the enemy than the walk would end, or null to keep the walk.
+        /// </summary>
+        public static PlannedAction PlanChargeInsteadOfWalk(Situation situation, Vector3 walkDestination,
+            ref float remainingAP, ref float remainingMP, string roleName)
+        {
+            if (situation.PrefersRanged || situation.AvailableAttacks == null) return null;
+            var gapClosers = situation.AvailableAttacks
+                .Where(a => AbilityDatabase.IsGapCloser(a))
+                .Where(a => !BlueprintCache.IsMultiTarget(a))
+                .Where(a => !FamiliarAbilities.IsMultiTargetFamiliarAbility(a))
+                .ToList();
+            if (gapClosers.Count == 0) return null;
+            var target = situation.BestTarget ?? situation.NearestEnemy;
+            return PlanChargeApproach(situation, target, gapClosers, ref remainingAP, ref remainingMP, roleName, walkDestination);
+        }
+
+        /// <summary>
+        /// Finds the empty, safe tile within the ability's range that is closest to the target and that
+        /// the game accepts as a target point for the ability.
+        /// </summary>
+        private static Vector3? FindChargeApproachPosition(BaseUnitEntity unit, BaseUnitEntity target,
+            AbilityData ability, Situation situation, out float bestDistToTarget)
+        {
+            bestDistToTarget = float.MaxValue;
+            float range = CombatAPI.GetAbilityRangeInTiles(ability);
+            if (range < 1f) return null;
+
+            var casterNode = unit.CurrentUnwalkableNode;
+            if (casterNode == null) return null;
+            bool avoidHazardZones = !situation.NeedsAoEEvacuation;
+
+            var candidates = new List<(Vector3 pos, float dist)>();
+            try
+            {
+                var nodes = GridAreaHelper.GetNodesSpiralAround(casterNode, unit.SizeRect, (int)Math.Ceiling(range));
+                var ownNodes = unit.GetOccupiedNodes();
+                foreach (var node in nodes)
+                {
+                    if (node == null || !node.Walkable) continue;
+                    if (ownNodes.Contains(node)) continue;
+                    if (node.TryGetUnit(out var occupant) && occupant != null && occupant.IsConscious) continue;
+                    if (!BattlefieldGrid.Instance.ValidateNode(unit, node)) continue;
+
+                    Vector3 pos = node.Vector3Position;
+                    if (CombatAPI.MetersToTiles(Vector3.Distance(unit.Position, pos)) > range) continue;
+                    if (avoidHazardZones && CombatAPI.IsPositionInHazardZone(pos, unit)) continue;
+
+                    float dist = CombatAPI.MetersToTiles(Vector3.Distance(pos, target.Position));
+                    candidates.Add((pos, dist));
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Planning.Error(ex, $"[MovementPlanner] FindChargeApproachPosition grid search failed");
+                return null;
+            }
+
+            // Ask the game about the closest spots first; it checks range, path and line rules.
+            candidates.Sort((a, b) => a.dist.CompareTo(b.dist));
+            int checks = Math.Min(candidates.Count, 12);
+            for (int i = 0; i < checks; i++)
+            {
+                if (CombatAPI.CanUseAbilityOn(ability, new TargetWrapper(candidates[i].pos), out string reason))
+                {
+                    bestDistToTarget = candidates[i].dist;
+                    return candidates[i].pos;
+                }
+                if (Main.IsDebugEnabled) Log.Planning.Debug($"[MovementPlanner] ChargeApproach spot ({candidates[i].pos.x:F1},{candidates[i].pos.z:F1}) rejected: {reason}");
+            }
             return null;
         }
 

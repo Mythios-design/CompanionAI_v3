@@ -705,7 +705,7 @@ namespace CompanionAI_v3.Planning.Plans
                     }
                     else
                     {
-                        actions.Add(tacticalMoveAction);
+                        actions.Add(ChargeOrWalk(situation, tacticalMoveAction, tacticalEval.ChosenStrategy, ref remainingAP, ref remainingMP));
                         Log.Planning.Info($"[Overseer] Phase 4.9: Tactical pre-attack move");
                     }
                 }

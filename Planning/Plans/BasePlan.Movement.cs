@@ -27,6 +27,21 @@ namespace CompanionAI_v3.Planning.Plans
         protected PlannedAction PlanMoveOrGapCloser(Situation situation, ref float remainingAP, bool forceMove, bool bypassCanMoveCheck, float predictedMP, AttackPhaseContext attackContext)
             => MovementPlanner.PlanMoveOrGapCloser(situation, ref remainingAP, RoleName, forceMove, bypassCanMoveCheck, predictedMP, attackContext);
 
+        /// <summary>
+        /// Walk-only tactical move: use a Charge toward the enemy instead when it ends closer than the walk.
+        /// Returns the action to add (the Charge, or the original walk).
+        /// </summary>
+        protected PlannedAction ChargeOrWalk(Situation situation, PlannedAction walkAction, TacticalStrategy strategy,
+            ref float remainingAP, ref float remainingMP)
+        {
+            if (strategy != TacticalStrategy.MoveOnly || walkAction?.MoveDestination == null) return walkAction;
+            var charge = MovementPlanner.PlanChargeInsteadOfWalk(situation, walkAction.MoveDestination.Value,
+                ref remainingAP, ref remainingMP, RoleName);
+            if (charge == null) return walkAction;
+            Log.Planning.Info($"[{RoleName}] Phase 1.6: Charge replaces walk-only approach");
+            return charge;
+        }
+
         protected PlannedAction PlanGapCloser(Situation situation, BaseUnitEntity target, ref float remainingAP)
             => MovementPlanner.PlanGapCloser(situation, target, ref remainingAP, RoleName);
 

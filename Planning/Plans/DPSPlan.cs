@@ -167,7 +167,7 @@ namespace CompanionAI_v3.Planning.Plans
                     }
                     else
                     {
-                        actions.Add(tacticalMoveAction);
+                        actions.Add(ChargeOrWalk(situation, tacticalMoveAction, tacticalEval.ChosenStrategy, ref remainingAP, ref remainingMP));
                     }
                 }
                 else if (!situation.HasHittableEnemies)
