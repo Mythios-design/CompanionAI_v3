@@ -181,6 +181,9 @@ namespace CompanionAI_v3.GameInterface
                 MachineSpirit.GameEventCollector.ClearDialogueBuffer();
                 MachineSpirit.GameEventCollector.ClearEvents();
 
+                // Heroic Act usage belongs to the session before the load
+                Core.HeroicActPolicy.Instance.ResetForCombat();
+
                 Log.Engine.Info("[SaveLoadPatch] Cache cleared after load - settings will reload on next access");
             }
             catch (Exception ex)

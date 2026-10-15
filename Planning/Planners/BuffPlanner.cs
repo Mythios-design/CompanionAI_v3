@@ -54,6 +54,14 @@ namespace CompanionAI_v3.Planning.Planners
                 .Select(g => g.First())
                 .ToList();
 
+            // Player Heroic Act rules (per-character toggle and order). Desperate Measures are unaffected.
+            if (ultimates.Any(a => a.Blueprint != null && a.Blueprint.IsHeroicAct)
+                && !HeroicActPolicy.Instance.IsAllowed(situation.Unit, out string heroicBlockReason, out _))
+            {
+                ultimates = ultimates.Where(a => a.Blueprint == null || !a.Blueprint.IsHeroicAct).ToList();
+                Log.Planning.Info($"[{roleName}] PlanUltimate: Heroic Act held back ({heroicBlockReason})");
+            }
+
             if (ultimates.Count == 0)
             {
                 if (Main.IsDebugEnabled) Log.Planning.Debug($"[{roleName}] PlanUltimate: No ultimate abilities available");
@@ -757,8 +765,15 @@ namespace CompanionAI_v3.Planning.Planners
 
             if (heroicAbilities.Count == 0) return null;
 
-            // ★ v3.26.0: 팀 조율 — 캐리 유닛 우선
-            string priorityId = TeamBlackboard.Instance.HeroicActPriorityUnitId;
+            // Player Heroic Act rules (per-character toggle and order) come first.
+            if (!HeroicActPolicy.Instance.IsAllowed(situation.Unit, out string heroicBlockReason, out bool playerOrderActive))
+            {
+                Log.Planning.Info($"[{roleName}] Heroic Act held back ({heroicBlockReason})");
+                return null;
+            }
+
+            // ★ v3.26.0: 팀 조율 — 캐리 유닛 우선 (skipped when the player has set an order)
+            string priorityId = playerOrderActive ? null : TeamBlackboard.Instance.HeroicActPriorityUnitId;
             if (priorityId != null && situation.Unit.UniqueId != priorityId)
             {
                 // 이 유닛은 캐리가 아님 → Heroic Act 억제

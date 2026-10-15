@@ -419,6 +419,21 @@ namespace CompanionAI_v3.Settings
                 { Language.Japanese, "敵の移動を予測してより安全な位置を選択します。\n次のターンに敵が移動できる位置を考慮します。" },
                 { Language.Chinese, "预测敌方移动以选择更安全的位置。\n考虑敌人下回合可能移动到的位置。" }
             },
+            ["AllowHeroicActs"] = new() {
+                { Language.English, "Allow Heroic Acts" }
+            },
+            ["AllowHeroicActsDesc"] = new() {
+                { Language.English, "When off, the AI never uses this character's Heroic Acts." }
+            },
+            ["HeroicActOrder"] = new() {
+                { Language.English, "Heroic Act order" }
+            },
+            ["HeroicActUnranked"] = new() {
+                { Language.English, "Unranked" }
+            },
+            ["HeroicActOrderDesc"] = new() {
+                { Language.English, "#1 uses its Heroic Act first, then #2, and so on. A character waits until every higher-ranked\nparty member has used theirs this combat (or can't: down, disabled, or no Heroic Act).\nUnranked characters go after all ranked ones. Includes characters you control yourself." }
+            },
             // ★ v3.9.72: Weapon Set Rotation
             ["EnableWeaponSetRotation"] = new() {
                 { Language.English, "Enable Weapon Set Rotation" },

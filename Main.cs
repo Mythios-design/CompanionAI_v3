@@ -3,6 +3,7 @@ using System.Reflection;
 using HarmonyLib;
 using UnityModManagerNet;
 using CompanionAI_v3.Analysis;
+using CompanionAI_v3.Core;
 using CompanionAI_v3.Data;
 using CompanionAI_v3.Logging;
 using CompanionAI_v3.Settings;
@@ -115,6 +116,7 @@ namespace CompanionAI_v3
                     TurnEventHandler.Instance.Subscribe();
                     // ★ v3.117.12: 친선 사격 진단 (게임 native IWarhammerAttackHandler)
                     Diagnostics.FriendlyFireDetector.Instance.Subscribe();
+                    HeroicActPolicy.Instance.Subscribe();
                 }
                 catch (Exception ex)
                 {
@@ -130,6 +132,7 @@ namespace CompanionAI_v3
                     TurnEventHandler.Instance.Unsubscribe();
                     // ★ v3.117.12: 친선 사격 진단 구독 해제
                     Diagnostics.FriendlyFireDetector.Instance.Unsubscribe();
+                    HeroicActPolicy.Instance.Unsubscribe();
 
                     // ★ v3.46.0: DirectiveOverlay 정리
                     DirectiveOverlayUI.Destroy();

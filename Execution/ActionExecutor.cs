@@ -202,6 +202,14 @@ namespace CompanionAI_v3.Execution
                 return ExecutionResult.Failure($"Group cooldown: {ability.Name}");
             }
 
+            // Player Heroic Act rules — final gate so no planning path can bypass them.
+            if (ability.Blueprint != null && ability.Blueprint.IsHeroicAct
+                && !HeroicActPolicy.Instance.IsAllowed(situation?.Unit ?? ability.Caster as BaseUnitEntity, out string heroicBlockReason, out _))
+            {
+                Log.Engine.Info($"[Executor] Heroic Act {ability.Name} held back: {heroicBlockReason}");
+                return ExecutionResult.Failure($"Heroic Act unavailable: {heroicBlockReason}");
+            }
+
             // ★ v3.0.93: 능력 자체가 사용 가능한지 먼저 체크 (쿨다운, 탄약, 충전 등)
             List<string> unavailableReasons;
             if (!CombatAPI.IsAbilityAvailable(ability, out unavailableReasons))

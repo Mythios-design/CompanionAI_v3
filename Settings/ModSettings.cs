@@ -56,6 +56,12 @@ namespace CompanionAI_v3.Settings
         // Combat behavior
         public bool UseBuffsBeforeAttack { get; set; } = true;
         public bool FinishLowHPEnemies { get; set; } = true;
+
+        /// <summary>Let the AI use this character's Heroic Acts.</summary>
+        public bool AllowHeroicActs { get; set; } = true;
+
+        /// <summary>Heroic Act order: 1 goes first, then 2, and so on. 0 = unranked (after all ranked).</summary>
+        public int HeroicActOrder { get; set; } = 0;
         public bool AvoidFriendlyFire { get; set; } = true;
 
         // ★ v3.110.11: MinEnemiesForAoE 삭제 — ClusterDetector.MIN_CLUSTER_SIZE (AIConfig)로 중앙집중.
@@ -477,6 +483,8 @@ namespace CompanionAI_v3.Settings
                     RangePreference = DefaultSettings.RangePreference,
                     UseBuffsBeforeAttack = DefaultSettings.UseBuffsBeforeAttack,
                     FinishLowHPEnemies = DefaultSettings.FinishLowHPEnemies,
+                    AllowHeroicActs = DefaultSettings.AllowHeroicActs,
+                    HeroicActOrder = DefaultSettings.HeroicActOrder,
                     AvoidFriendlyFire = DefaultSettings.AvoidFriendlyFire,
                     AllowRetreat = DefaultSettings.AllowRetreat,
                     SeekCover = DefaultSettings.SeekCover,

@@ -1784,8 +1784,38 @@ namespace CompanionAI_v3.UI
             GUILayout.Label($"<color={UIStyles.TextMid}>{L("FinishLowHPEnemiesDesc")}</color>", UIStyles.Description);
             UIStyles.Space(UIStyles.SpaceLG);
 
+            DrawHeroicActSettings();
+            UIStyles.Space(UIStyles.SpaceLG);
+
             DrawAdvancedSettings();
             UIStyles.Space(UIStyles.SpaceMD);
+        }
+
+        private const int MaxHeroicActOrder = 12;
+
+        private static void DrawHeroicActSettings()
+        {
+            _editingSettings.AllowHeroicActs = DrawCheckbox(_editingSettings.AllowHeroicActs, L("AllowHeroicActs"));
+            GUILayout.Label($"<color={UIStyles.TextMid}>{L("AllowHeroicActsDesc")}</color>", UIStyles.Description);
+
+            if (!_editingSettings.AllowHeroicActs) return;
+
+            UIStyles.Space(UIStyles.SpaceMD);
+            int order = _editingSettings.HeroicActOrder;
+            string orderText = order <= 0 ? L("HeroicActUnranked") : $"#{order}";
+
+            GUILayout.BeginHorizontal();
+            GUILayout.Label($"<b>{L("HeroicActOrder")}:</b>", UIStyles.BoldLabel, GUILayout.Width(UIStyles.Sd(120)));
+            if (GUILayout.Button("-", UIStyles.Button, GUILayout.Width(UIStyles.Sd(28)), GUILayout.Height(UIStyles.Sd(24))))
+                order = Math.Max(0, order - 1);
+            GUILayout.Label($"<color={UIStyles.Gold}>{orderText}</color>", UIStyles.Label, GUILayout.Width(UIStyles.Sd(80)));
+            if (GUILayout.Button("+", UIStyles.Button, GUILayout.Width(UIStyles.Sd(28)), GUILayout.Height(UIStyles.Sd(24))))
+                order = Math.Min(MaxHeroicActOrder, order + 1);
+            GUILayout.FlexibleSpace();
+            GUILayout.EndHorizontal();
+            _editingSettings.HeroicActOrder = order;
+
+            GUILayout.Label($"<color={UIStyles.TextMid}>{L("HeroicActOrderDesc")}</color>", UIStyles.Description);
         }
 
         private static void DrawAdvancedSettings()

@@ -140,6 +140,7 @@ namespace CompanionAI_v3.GameInterface
             if (!isTurnBased)
             {
                 Log.Engine.Info("[TurnEventHandler] Combat ended");
+                Core.HeroicActPolicy.Instance.ResetForCombat();
 
                 // ★ v3.9.80: 승리 환호 — OnCombatEnd() 전에 호출 (ClearAll 이전에 캐릭터 식별 필요)
                 try
@@ -183,6 +184,7 @@ namespace CompanionAI_v3.GameInterface
             else
             {
                 Log.Engine.Info("[TurnEventHandler] Combat started");
+                Core.HeroicActPolicy.Instance.ResetForCombat();
 
                 // ★ v3.111.19 Phase D.5: Defense-in-depth — combat end cleanup이 누락되는 경로
                 //   (게임 crash, save/load, 비정상 종료 등)에서 stale cache 방지.
