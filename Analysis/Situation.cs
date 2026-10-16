@@ -257,6 +257,9 @@ namespace CompanionAI_v3.Analysis
         /// <summary>사용 가능한 버프</summary>
         public List<AbilityData> AvailableBuffs { get; set; } = new List<AbilityData>();
 
+        /// <summary>Buffs only used when nothing else used the AP (Phase 9), e.g. Word of the Emperor.</summary>
+        public List<AbilityData> LastResortBuffs { get; set; } = new List<AbilityData>();
+
         /// <summary>사용 가능한 공격</summary>
         public List<AbilityData> AvailableAttacks { get; set; } = new List<AbilityData>();
 
@@ -499,6 +502,7 @@ namespace CompanionAI_v3.Analysis
 
             // Abilities
             AvailableBuffs.Clear();
+            LastResortBuffs.Clear();
             AvailableAttacks.Clear();
             AvailableHeals.Clear();
             AvailableDebuffs.Clear();

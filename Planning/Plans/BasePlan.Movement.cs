@@ -457,6 +457,15 @@ namespace CompanionAI_v3.Planning.Plans
                     $"{RoleName} emergency heal", situation);
             }
 
+            // Phase 1.2: Pyromancer melee combo — burning blade setup or Endure refresh (early return)
+            var comboActions = PyroMeleeCombo.PlanSetupOrUpkeep(situation, ref remainingAP, RoleName);
+            if (comboActions != null)
+            {
+                actions.AddRange(comboActions);
+                return CreatePlanWithSnapshot(actions, TurnPriority.BuffedAttack,
+                    $"{RoleName} burning blade", situation);
+            }
+
             // Phase 1.5: Reload (early return 없음 — 이후 Phase 계속 진행)
             var reloadAction = PlanReload(situation, ref remainingAP);
             if (reloadAction != null)

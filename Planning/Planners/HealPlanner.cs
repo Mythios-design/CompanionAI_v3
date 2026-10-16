@@ -48,8 +48,10 @@ namespace CompanionAI_v3.Planning.Planners
 
                 string reason;
                 if (!CombatAPI.CanUseAbilityOn(heal, selfTarget, out reason)) continue;
+                if (!PyroMeleeCombo.AllowHeal(heal, situation.Unit)) continue;  // Large Medikit vs burning blade
 
-                float score = UtilityScorer.ScoreHeal(heal, situation.Unit, situation);
+                float score = UtilityScorer.ScoreHeal(heal, situation.Unit, situation)
+                    + PyroMeleeCombo.HealPreferenceBonus(heal, situation.Unit);
                 if (score > bestScore)
                 {
                     bestScore = score;
@@ -96,8 +98,10 @@ namespace CompanionAI_v3.Planning.Planners
 
                 string reason;
                 if (!CombatAPI.CanUseAbilityOn(heal, targetWrapper, out reason)) continue;
+                if (!PyroMeleeCombo.AllowHeal(heal, ally)) continue;  // Large Medikit vs burning blade
 
-                float score = UtilityScorer.ScoreHeal(heal, ally, situation);
+                float score = UtilityScorer.ScoreHeal(heal, ally, situation)
+                    + PyroMeleeCombo.HealPreferenceBonus(heal, ally);
                 if (score > bestScore)
                 {
                     bestScore = score;
@@ -249,8 +253,10 @@ namespace CompanionAI_v3.Planning.Planners
 
                     // LOS 검증 — 해당 위치에서 힐 시전 가능 확인
                     if (!CombatAPI.CanReachTargetFromPosition(heal, pos, woundedAlly)) continue;
+                    if (!PyroMeleeCombo.AllowHeal(heal, woundedAlly)) continue;  // Large Medikit vs burning blade
 
-                    float score = UtilityScorer.ScoreHeal(heal, woundedAlly, situation);
+                    float score = UtilityScorer.ScoreHeal(heal, woundedAlly, situation)
+                        + PyroMeleeCombo.HealPreferenceBonus(heal, woundedAlly);
                     if (score > tileScore)
                     {
                         tileScore = score;

@@ -44,8 +44,8 @@ namespace CompanionAI_v3.Planning.Plans
             string unitId = situation.Unit.UniqueId;
             float currentAP = remainingAP;  // 람다에서 사용하기 위해 로컬 변수에 복사
 
-            // 1. 아직 사용 안 한 저우선순위 버프
-            foreach (var buff in situation.AvailableBuffs)
+            // 1. 아직 사용 안 한 저우선순위 버프 (then last-resort buffs such as Word of the Emperor)
+            foreach (var buff in System.Linq.Enumerable.Concat(situation.AvailableBuffs, situation.LastResortBuffs))
             {
                 float cost = CombatAPI.GetAbilityAPCost(buff);
                 if (cost > spendableAP) continue;

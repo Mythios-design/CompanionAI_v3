@@ -100,6 +100,9 @@ namespace CompanionAI_v3.Analysis
                 // 타겟 분석 (이제 AvailableAttacks 사용 가능)
                 AnalyzeTargets(situation, unit);
 
+                // Ability-specific rules (pyromancer melee combo, last-resort buffs) — needs melee-reachable enemies
+                Planning.Planners.PyroMeleeCombo.ApplyAbilityRules(situation);
+
                 // Phase 4 ThreatDifferential — 적 → 아군 위협 매핑 사전 계산.
                 //   ScoreEnemy 가 read-only 활용 (squishy 보호 우선순위).
                 //   사역마 제외판 (CombatantAllies) 사용 — 사역마는 보호 우선순위 낮음.
