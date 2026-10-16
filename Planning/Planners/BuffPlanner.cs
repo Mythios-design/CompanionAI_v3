@@ -1513,6 +1513,11 @@ namespace CompanionAI_v3.Planning.Planners
                     // BringItDown 등 아군 대상 — 최적 아군 선택
                     var bestAlly = TargetScorer.SelectBestAllyForBuff(situation.CombatantAllies, situation);
                     if (bestAlly == null) continue;
+                    if (!TurnGrantPolicy.IsWorthGranting(ability, bestAlly, out string grantWhy))
+                    {
+                        Log.Planning.Info($"[{roleName}] Phase 6: skip {ability.Name} -> {bestAlly.CharacterName}: {grantWhy}");
+                        continue;
+                    }
                     target = new TargetWrapper(bestAlly);
                 }
                 else

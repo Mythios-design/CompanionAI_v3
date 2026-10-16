@@ -219,6 +219,13 @@ namespace CompanionAI_v3.Execution
                 return ExecutionResult.Failure($"Ability unavailable: {comboBlockReason}");
             }
 
+            if (target.Entity is BaseUnitEntity grantTarget
+                && !Planning.Planners.TurnGrantPolicy.IsWorthGranting(ability, grantTarget, out string grantBlockReason))
+            {
+                Log.Engine.Info($"[Executor] {ability.Name} held back: {grantBlockReason}");
+                return ExecutionResult.Failure($"Ability unavailable: {grantBlockReason}");
+            }
+
             if (!Planning.Planners.AbilityPolicy.AllowAtExecution(ability, out string policyBlockReason))
             {
                 Log.Engine.Info($"[Executor] {ability.Name} held back: {policyBlockReason}");

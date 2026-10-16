@@ -305,6 +305,12 @@ namespace CompanionAI_v3.Planning.Plans
                         continue;
                     }
 
+                    if (isTurnGrant && !Planners.TurnGrantPolicy.IsWorthGranting(buff, target, out string grantWhy))
+                    {
+                        Log.Planning.Info($"[{RoleName}] Skip {buff.Name} -> {target.CharacterName}: {grantWhy}");
+                        continue;
+                    }
+
                     var targetWrapper = new TargetWrapper(target);
                     string reason;
                     if (CombatAPI.CanUseAbilityOn(buff, targetWrapper, out reason))
