@@ -1213,6 +1213,8 @@ namespace CompanionAI_v3.Core
 
             // 능력 사용 추적
             TrackAbilityUsage(unit, nextAction, success);
+            if (success && nextAction.Ability != null && Data.AbilityDatabase.IsTaunt(nextAction.Ability))
+                Planning.Planners.TauntTracker.RecordCast(unit, nextAction.Ability, situation?.Enemies);
 
             // ★ v3.8.86: 그룹 실패 처리 (기존 HandleExecutionFailure 호출 전)
             if (result.Type == ResultType.Failure && nextAction.GroupTag != null)

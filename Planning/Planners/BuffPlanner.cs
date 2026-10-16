@@ -670,6 +670,14 @@ namespace CompanionAI_v3.Planning.Planners
 
                 if (AllyStateCache.HasBuff(situation.Unit, taunt)) continue;
 
+                bool allyTargetTaunt = taunt.Blueprint?.CanTargetFriends == true && taunt.Blueprint?.CanTargetEnemies == false
+                    && taunt.Blueprint?.CanTargetSelf != true;
+                if (!allyTargetTaunt && !TauntTracker.IsWorthCasting(situation.Unit, taunt, situation.Enemies, out string tauntReason))
+                {
+                    Log.Planning.Info($"[{roleName}] Skip taunt {taunt.Name}: {tauntReason}");
+                    continue;
+                }
+
                 TargetWrapper target;
                 if (taunt.Blueprint?.CanTargetSelf == true)
                 {

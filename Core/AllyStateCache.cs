@@ -291,24 +291,15 @@ namespace CompanionAI_v3.Core
             var mappings = new List<BuffMapping>();
             try
             {
-                // ★ v3.8.62: BlueprintCache 캐시 사용 (GetComponent O(n) → O(1))
-                var runAction = BlueprintCache.GetCachedRunAction(ability.Blueprint);
-                if (runAction?.Actions?.Actions != null)
+                // Walk the full action tree: many buffs sit inside saving throws or conditions.
+                var buffs = AbilityBuffMap.GetBuffsToCheck(ability.Blueprint);
+                if (buffs != null)
                 {
-                    for (int i = 0; i < runAction.Actions.Actions.Length; i++)
+                    foreach (var buff in buffs)
                     {
-                        if (runAction.Actions.Actions[i] is ContextActionApplyBuff applyBuff && applyBuff.Buff != null)
-                        {
-                            string bpGuid = applyBuff.Buff.AssetGuid?.ToString();
-                            if (!string.IsNullOrEmpty(bpGuid))
-                            {
-                                mappings.Add(new BuffMapping
-                                {
-                                    BuffBlueprintGuid = bpGuid,
-                                    Blueprint = applyBuff.Buff
-                                });
-                            }
-                        }
+                        string bpGuid = buff.AssetGuid?.ToString();
+                        if (string.IsNullOrEmpty(bpGuid)) continue;
+                        mappings.Add(new BuffMapping { BuffBlueprintGuid = bpGuid, Blueprint = buff });
                     }
                 }
             }

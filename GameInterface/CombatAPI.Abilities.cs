@@ -712,24 +712,14 @@ namespace CompanionAI_v3.GameInterface
                 // ★ v3.4.01: P0-3 Blueprint null 체크
                 if (ability.Blueprint == null) return false;
 
-                // 능력의 버프 블루프린트 추출
-                // ★ v3.8.62: BlueprintCache 캐시 사용 (GetComponent O(n) → O(1))
-                var runAction = BlueprintCache.GetCachedRunAction(ability.Blueprint);
-                if (runAction?.Actions?.Actions != null)
+                // Walk the full action tree: many buffs sit inside saving throws or conditions.
+                var buffs = AbilityBuffMap.GetBuffsToCheck(ability.Blueprint);
+                if (buffs != null)
                 {
-                    foreach (var action in runAction.Actions.Actions)
+                    foreach (var buffBlueprint in buffs)
                     {
-                        if (action is ContextActionApplyBuff applyBuff)
-                        {
-                            var buffBlueprint = applyBuff.Buff;
-                            if (buffBlueprint == null) continue;
-
-                            var existingBuff = unit.Buffs.GetBuff(buffBlueprint);
-                            if (existingBuff != null)
-                            {
-                                return true;
-                            }
-                        }
+                        if (unit.Buffs.GetBuff(buffBlueprint) != null)
+                            return true;
                     }
                 }
             }

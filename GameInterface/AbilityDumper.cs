@@ -291,6 +291,17 @@ namespace CompanionAI_v3.GameInterface
                             }
                         }
                         catch { }
+                        try
+                        {
+                            var buffMap = AbilityBuffMap.Get(bp);
+                            if (buffMap != null && (buffMap.TargetBuffs.Count > 0 || buffMap.CasterBuffs.Count > 0))
+                            {
+                                sb.AppendLine($"      AppliesToTarget: {string.Join(", ", buffMap.TargetBuffs.Select(b => b.name))}");
+                                sb.AppendLine($"      AppliesToCaster: {string.Join(", ", buffMap.CasterBuffs.Select(b => b.name))}");
+                                sb.AppendLine($"      AoERadius: {CombatAPI.GetAoERadius(ability):F1} tiles");
+                            }
+                        }
+                        catch { }  // diagnostic output only
                         sb.AppendLine();
                     }
 
