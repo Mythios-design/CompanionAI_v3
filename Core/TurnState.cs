@@ -176,6 +176,13 @@ namespace CompanionAI_v3.Core
         /// </summary>
         public bool MovementBlockedThisTurn { get; set; }
 
+        /// <summary>
+        /// Ranged characters get one end-of-turn reposition with leftover MP once their actions are spent.
+        /// Pending: the next plan should be the reposition only. Done: already tried this turn.
+        /// </summary>
+        public bool EndOfTurnRepositionPending { get; set; }
+        public bool EndOfTurnRepositionDone { get; set; }
+
         /// <summary>최대 액션 도달 여부</summary>
         public bool HasReachedMaxActions => ActionCount >= MaxActionsPerTurn;
 

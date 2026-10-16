@@ -225,7 +225,11 @@ namespace CompanionAI_v3.Diagnostics
                 ? $"{abilityPart} → {targetPart}"
                 : abilityPart;
 
-            string detail = success ? "OK" : (result.Reason ?? "FAIL");
+            // A skipped step (e.g. moving to the tile the unit already stands on) did what was needed.
+            if (result.WasSkipped)
+                success = true;
+
+            string detail = success ? (result.WasSkipped ? $"Skipped: {result.Reason}" : "OK") : (result.Reason ?? "FAIL");
 
             _currentTurn.Results.Add(new ExecutionResultLog
             {

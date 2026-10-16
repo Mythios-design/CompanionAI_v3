@@ -1589,6 +1589,107 @@ namespace CompanionAI_v3.Planning.Planners
             return PlannedAction.Move(bestPosition.Position, "Tactical reposition (cooldown)");
         }
 
+        /// <summary>
+        /// End-of-turn reposition for ranged characters: their actions are spent but MP is left, so spend
+        /// it moving somewhere safer (fewer melee enemies able to reach, less enemy-turn threat, better cover)
+        /// while staying within weapon range for next turn. Returns null when the current tile is already
+        /// as safe as anything reachable.
+        /// </summary>
+        public static PlannedAction PlanEndOfTurnReposition(Situation situation)
+        {
+            if (situation?.Unit == null) return null;
+            if (situation.RangePreference != Settings.RangePreference.PreferRanged) return null;
+            if (!situation.CanMove || situation.CurrentMP <= 0f) return null;
+            if (!situation.HasLivingEnemies || situation.Enemies == null || situation.Enemies.Count == 0) return null;
+
+            var unit = situation.Unit;
+            var enemies = situation.Enemies;
+
+            float maxSafeDistance = situation.WeaponRange.MaxRetreatDistance;
+            if (maxSafeDistance < 2f && !situation.WeaponRange.IsScatter)
+                maxSafeDistance = 2f;
+
+            UnityEngine.Vector3? familiarPos = null;
+            float maxFamiliarDist = 0f;
+            if (situation.HasFamiliar && situation.Familiar != null &&
+                (situation.FamiliarType == Kingmaker.Enums.PetType.ServoskullSwarm ||
+                 situation.FamiliarType == Kingmaker.Enums.PetType.Raven))
+            {
+                familiarPos = situation.FamiliarPosition;
+                maxFamiliarDist = FamiliarAPI.GetMaxFamiliarAbilityRange(unit);
+            }
+
+            AIRole role = situation.CharacterSettings?.Role ?? AIRole.Auto;
+            var best = MovementAPI.FindRetreatPositionSync(
+                unit, enemies, situation.MinSafeDistance, maxSafeDistance,
+                0f, role, familiarPos, maxFamiliarDist);
+            if (best == null) return null;
+
+            var currentNode = unit.Position.GetNearestNodeXZ() as Kingmaker.Pathfinding.CustomGridNodeBase;
+            if (currentNode == null || best.Node == null || best.Node == currentNode) return null;
+
+            // Compare both tiles with the same measurements (the retreat fallback path leaves some fields unset).
+            var here = MeasureSafety(unit, currentNode, enemies);
+            var there = MeasureSafety(unit, best.Node, enemies);
+
+            string verdict;
+            if (there.MeleeReach < here.MeleeReach)
+                verdict = "fewer melee enemies can reach";
+            else if (there.MeleeReach > here.MeleeReach)
+                verdict = null;
+            else if (there.TurnThreat > here.TurnThreat + 0.25f)
+                verdict = null;
+            else if (there.TurnThreat <= here.TurnThreat - 0.5f)
+                verdict = "lower enemy-turn threat";
+            else if (there.Hide >= here.Hide + 15f)
+                verdict = "better cover";
+            else
+                verdict = null;
+
+            Log.Planning.Info($"[MovementPlanner] {unit.CharacterName}: End-of-turn reposition check " +
+                $"here(melee={here.MeleeReach}, threat={here.TurnThreat:F1}, hide={here.Hide:F0}) " +
+                $"there(melee={there.MeleeReach}, threat={there.TurnThreat:F1}, hide={there.Hide:F0}, " +
+                $"pos=({best.Position.x:F1},{best.Position.z:F1})) → {(verdict ?? "stay")}");
+
+            if (verdict == null) return null;
+
+            Core.TeamBlackboard.Instance?.ReserveMovePosition(best.Position);
+            return PlannedAction.Move(best.Position, $"End-of-turn reposition ({verdict})");
+        }
+
+        private struct TileSafety
+        {
+            public int MeleeReach;
+            public float TurnThreat;
+            public float Hide;
+        }
+
+        private static TileSafety MeasureSafety(BaseUnitEntity unit, Kingmaker.Pathfinding.CustomGridNodeBase node, List<BaseUnitEntity> enemies)
+        {
+            var pos = node.Vector3Position;
+            var result = new TileSafety
+            {
+                MeleeReach = CombatAPI.CountMeleeEnemiesThatCanReach(unit, pos, enemies)
+            };
+            foreach (var enemy in enemies)
+            {
+                if (enemy == null || enemy.LifeState.IsDead) continue;
+                result.TurnThreat += CombatAPI.GetEnemyTurnThreatScore(enemy, pos);
+            }
+            try
+            {
+                var scratch = new MovementAPI.PositionScore();
+                scratch.ApplyHideComponents(TileScorerPort.GetHideScoreComponents(node, unit.SizeRect, enemies));
+                result.Hide = scratch.HideScore;
+            }
+            catch (Exception ex)
+            {
+                // Cover is a tiebreaker only; a failed lookup just means "no cover advantage".
+                if (Main.IsDebugEnabled) Log.Planning.Error(ex, "[MovementPlanner] MeasureSafety hide score");
+            }
+            return result;
+        }
+
         #region Helper Methods
 
         /// <summary>

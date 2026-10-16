@@ -510,7 +510,7 @@ namespace CompanionAI_v3.Execution
                     if (currentNode != null && destNode != null && currentNode == destNode)
                     {
                         Log.Engine.Info($"[Executor] Already at destination — skipping move");
-                        return ExecutionResult.Continue();
+                        return ExecutionResult.Skipped("Already in position");
                     }
                 }
                 catch { }

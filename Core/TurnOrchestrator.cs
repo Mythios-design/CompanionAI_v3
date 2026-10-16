@@ -298,6 +298,9 @@ namespace CompanionAI_v3.Core
                 return HandleLLMJudge(unit, unitId, unitName, turnState, situation);
             }
 
+            if (turnState.EndOfTurnRepositionPending)
+                return PlanAndExecuteEndOfTurnReposition(unit, unitId, unitName, turnState, situation);
+
             // Plan 생성/업데이트
             _profilerStopwatch.Restart();
 
@@ -936,6 +939,43 @@ namespace CompanionAI_v3.Core
         #region ProcessTurn Sub-Methods (v3.5.36)
 
         /// <summary>
+        /// Before ending a ranged character's turn with MP left, give them one chance to move somewhere
+        /// safer. Returns true when a reposition plan should be built from a fresh analysis.
+        /// </summary>
+        private bool TryBeginEndOfTurnReposition(BaseUnitEntity unit, string unitName, TurnState turnState, float currentMP)
+        {
+            if (turnState.EndOfTurnRepositionDone || turnState.MovementBlockedThisTurn) return false;
+            if (currentMP <= 0f) return false;
+            if (CombatAPI.GetRangePreference(unit) != Settings.RangePreference.PreferRanged) return false;
+
+            turnState.EndOfTurnRepositionDone = true;
+            turnState.EndOfTurnRepositionPending = true;
+            turnState.Plan?.Cancel("End-of-turn reposition");
+            turnState.CurrentComputePhase = ComputePhase.Ready;
+            Log.Engine.Info($"[Orchestrator] {unitName}: Actions spent with MP={currentMP:F1} left - checking end-of-turn reposition");
+            return true;
+        }
+
+        private ExecutionResult PlanAndExecuteEndOfTurnReposition(BaseUnitEntity unit, string unitId, string unitName, TurnState turnState, Situation situation)
+        {
+            turnState.EndOfTurnRepositionPending = false;
+
+            var move = CompanionAI_v3.Planning.Planners.MovementPlanner.PlanEndOfTurnReposition(situation);
+            if (move == null)
+            {
+                Log.Engine.Info($"[Orchestrator] {unitName}: No safer tile reachable - ending turn");
+                return ExecutionResult.EndTurn("Plan complete");
+            }
+
+            turnState.Plan = new TurnPlan(new List<PlannedAction> { move }, TurnPriority.Retreat, "End-of-turn reposition",
+                situation.HPPercent, situation.NearestEnemyDistance, situation.NormalHittableCount,
+                situation.CurrentAP, situation.CurrentMP, CombatAPI.GetZeroAPAttacks(unit).Count);
+            TeamBlackboard.Instance.RegisterUnitPlan(unitId, turnState.Plan);
+            CombatReportCollector.Instance.RecordPlan(turnState.Plan);
+            return ExecuteNextAction(unit, unitName, turnState, situation);
+        }
+
+        /// <summary>
         /// ★ v3.5.36: 턴 시작 전 검증 및 준비
         /// - 새 턴 시 stale 데이터 정리
         /// - AP=0 안전장치
@@ -954,6 +994,14 @@ namespace CompanionAI_v3.Core
             // 턴 상태 가져오기 또는 생성
             turnState = GetOrCreateTurnState(unit);
 
+            // The end-of-turn reposition is the last thing a turn does; don't let a fresh plan walk back.
+            if (turnState.EndOfTurnRepositionDone && !turnState.EndOfTurnRepositionPending
+                && (turnState.Plan == null || turnState.Plan.IsComplete))
+            {
+                Log.Engine.Info($"[Orchestrator] {unitName}: End-of-turn reposition finished - ending turn");
+                return ExecutionResult.EndTurn("Plan complete");
+            }
+
             // AP=0이고 이미 행동했으면 안전장치로 턴 종료
             float currentMP = CombatAPI.GetCurrentMP(unit);
             float gameAP = CombatAPI.GetCurrentAP(unit);
@@ -971,6 +1019,10 @@ namespace CompanionAI_v3.Core
                 else if (CombatAPI.HasZeroAPAttack(unit) && CombatAPI.CanAnyZeroAPAttackReachEnemy(unit, currentMP))
                 {
                     Log.Engine.Info($"[Orchestrator] {unitName}: AP=0 but 0 AP attacks reachable (MP={currentMP:F1}) - continuing");
+                }
+                else if (TryBeginEndOfTurnReposition(unit, unitName, turnState, currentMP))
+                {
+                    // Fall through: next analysis builds a reposition-only plan.
                 }
                 else
                 {
@@ -1107,6 +1159,9 @@ namespace CompanionAI_v3.Core
                     Log.Engine.Warn($"[Orchestrator] {unitName}: Plan empty but AP={remainingAP:F1} remaining — safety replan #{turnState.EmptyPlanEndCount}");
                     return ExecutionResult.Continue();
                 }
+
+                if (TryBeginEndOfTurnReposition(unit, unitName, turnState, CombatAPI.GetCurrentMP(unit)))
+                    return ExecutionResult.Continue();
 
                 if (remainingAP > 0)
                     Log.Engine.Warn($"[Orchestrator] {unitName}: EndTurn with AP={remainingAP:F1} remaining (safety replan exhausted)");

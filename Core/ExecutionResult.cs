@@ -18,6 +18,9 @@ namespace CompanionAI_v3.Core
         public Vector3? Destination { get; private set; }
         public string Reason { get; private set; }
 
+        /// <summary>True when the step was intentionally skipped because nothing needed doing.</summary>
+        public bool WasSkipped { get; private set; }
+
         /// <summary>
         /// ★ v3.7.25: MultiTarget 능력용 타겟 리스트
         /// AerialRush 등 2개 이상의 타겟이 필요한 능력에 사용
@@ -104,6 +107,17 @@ namespace CompanionAI_v3.Core
             {
                 Type = ResultType.Continue,
                 Reason = "Continue to next action"
+            };
+        }
+
+        /// <summary>A step that needed no action (e.g. a move to the tile the unit already stands on).</summary>
+        public static ExecutionResult Skipped(string reason)
+        {
+            return new ExecutionResult
+            {
+                Type = ResultType.Continue,
+                Reason = reason,
+                WasSkipped = true
             };
         }
 
