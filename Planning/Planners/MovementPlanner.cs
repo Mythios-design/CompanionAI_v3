@@ -1008,7 +1008,8 @@ namespace CompanionAI_v3.Planning.Planners
                                 return null;
                             }
                             Log.Planning.Info($"[{roleName}] PlanMoveToEnemy: Safe approach ({approachDistToEnemy:F1} tiles from enemy)");
-                            return PlannedAction.Move(safeApproach.Position, $"Safe approach {target.CharacterName}");
+                            var approachPos = PreferCoverNear(situation, safeApproach.Position, target, effectiveMP, roleName);
+                            return PlannedAction.Move(approachPos, $"Safe approach {target.CharacterName}");
                         }
                         if (Main.IsDebugEnabled) Log.Planning.Debug($"[{roleName}] PlanMoveToEnemy: No safe ranged position found (effectiveMP={effectiveMP:F1})");
                         return null;
@@ -1581,7 +1582,7 @@ namespace CompanionAI_v3.Planning.Planners
                 ? CombatAPI.MetersToTiles(Vector3.Distance(bestPosition.Position, situation.NearestEnemy.Position))
                 : -1f;
             Log.Planning.Info($"[MovementPlanner] TacticalReposition: ({bestPosition.Position.x:F1},{bestPosition.Position.z:F1}), " +
-                $"score={bestPosition.TotalScore:F1}, move={moveDistance:F1}m, cover={bestPosition.CoverScore:F1}, " +
+                $"score={bestPosition.TotalScore:F1}, move={moveDistance:F1}m, hide={bestPosition.HideScore:F0}, " +
                 $"nearestEnemy={landedDist:F1}t, enemyTurnThreat={bestPosition.EnemyTurnThreatSum:F0}, maxSafe={maxSafeDistance:F1}t");
 
             // ★ v3.10.0: 이동 위치 예약 (다른 유닛 밀집 방지)
@@ -1699,7 +1700,7 @@ namespace CompanionAI_v3.Planning.Planners
             if (best == null || best.Node == null) return null;
 
             float newDist = CombatAPI.GetDistanceInTiles(best.Position, target);
-            if (newDist >= targetDist - 1f)
+            if (newDist >= targetDist - 0.5f)
             {
                 Log.Planning.Info($"[MovementPlanner] {unit.CharacterName}: End-of-turn advance skipped (best tile {newDist:F1}t vs now {targetDist:F1}t from {target.CharacterName})");
                 return null;
@@ -1709,6 +1710,62 @@ namespace CompanionAI_v3.Planning.Planners
                 $"({targetDist:F1}t → {newDist:F1}t, MP={situation.CurrentMP:F1})");
             Core.TeamBlackboard.Instance?.ReserveMovePosition(best.Position);
             return PlannedAction.Move(best.Position, $"End-of-turn advance toward {target.CharacterName}");
+        }
+
+        /// <summary>
+        /// A ranged character approaching an enemy usually can't move again after shooting, so where they stop
+        /// is where they spend the enemy turn. Look at reachable tiles near the chosen approach tile and take one
+        /// with clearly better cover, as long as it isn't further from the target, doesn't lose a shot, and
+        /// isn't reachable by more melee enemies.
+        /// </summary>
+        public static Vector3 PreferCoverNear(Situation situation, Vector3 destination, BaseUnitEntity target, float mp, string roleName)
+        {
+            try
+            {
+                var unit = situation.Unit;
+                var enemies = situation.Enemies;
+                var destNode = destination.GetNearestNodeXZ() as CustomGridNodeBase;
+                if (unit == null || target == null || enemies == null || destNode == null) return destination;
+
+                var tiles = mp > 0 ? MovementAPI.FindAllReachableTilesWithThreatsSync(unit, mp) : MovementAPI.FindAllReachableTilesWithThreatsSync(unit);
+                if (tiles == null || tiles.Count == 0) return destination;
+
+                var here = MeasureSafety(unit, destNode, enemies);
+                float destToTarget = CombatAPI.MetersToTiles(Vector3.Distance(destination, target.Position));
+                int destHittable = CombatAPI.CountHittableEnemiesFromPosition(unit, destNode, enemies, null, null);
+                bool avoidHazard = !CombatAPI.IsUnitInHazardZone(unit);
+
+                CustomGridNodeBase bestNode = null;
+                TileSafety best = here;
+                foreach (var kvp in tiles)
+                {
+                    var cell = kvp.Value;
+                    var node = cell.Node as CustomGridNodeBase;
+                    if (node == null || !cell.IsCanStand || node == destNode) continue;
+                    var pos = node.Vector3Position;
+                    if (CombatAPI.MetersToTiles(Vector3.Distance(pos, destination)) > 2.5f) continue;
+                    if (CombatAPI.MetersToTiles(Vector3.Distance(pos, target.Position)) > destToTarget + 1f) continue;
+                    if (avoidHazard && CombatAPI.IsPositionInHazardZone(pos, unit)) continue;
+                    if (!BattlefieldGrid.Instance.ValidateNode(unit, node)) continue;
+
+                    var safety = MeasureSafety(unit, node, enemies);
+                    if (safety.MeleeReach > here.MeleeReach) continue;
+                    if (safety.Hide < best.Hide + 15f) continue;
+                    if (destHittable > 0 && CombatAPI.CountHittableEnemiesFromPosition(unit, node, enemies, null, null) == 0) continue;
+                    best = safety;
+                    bestNode = node;
+                }
+
+                if (bestNode == null) return destination;
+                Log.Planning.Info($"[{roleName}] Approach tile adjusted for cover: hide {here.Hide:F0} → {best.Hide:F0} " +
+                    $"({bestNode.Vector3Position.x:F1},{bestNode.Vector3Position.z:F1})");
+                return bestNode.Vector3Position;
+            }
+            catch (Exception ex)
+            {
+                Log.Planning.Error(ex, "[MovementPlanner] PreferCoverNear failed");
+                return destination;
+            }
         }
 
         private struct TileSafety

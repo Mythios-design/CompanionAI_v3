@@ -1100,8 +1100,9 @@ namespace CompanionAI_v3.Planning.Plans
             //   PlanMoveOrGapCloser는 5개 호출부 중 일반 턴 approach에 필수인 경로가 있어
             //   blanket push-down 금지. 본 분기만 ExtraTurn에서 스킵.
             // Melee characters with movement are the exception: closing in is exactly what they should do.
-            bool meleeCanClose = situation.RangePreference == Settings.RangePreference.PreferMelee && remainingMP > 0;
-            if (situation.IsExtraTurn && !hasMoveInPlan && needsMovement && !meleeCanClose)
+            // Extra turns that come with movement can move like a normal turn; only skip when there's no MP.
+            bool extraTurnCanMove = situation.CurrentMP > 0 && remainingMP > 0;
+            if (situation.IsExtraTurn && !hasMoveInPlan && needsMovement && !extraTurnCanMove)
             {
                 Log.Planning.Info($"[DPS] Phase 8: Skip reposition — extra turn (AP={situation.CurrentAP:F1}, MP={situation.CurrentMP:F1})");
             }

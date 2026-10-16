@@ -584,7 +584,7 @@ namespace CompanionAI_v3.Planning.Plans
             // ★ v3.9.22: GapCloser는 MP 없이도 진입 허용 (AP 기반 이동)
             // ★ v3.111.13: ExtraTurn 가드 유지 — PlanMoveOrGapCloser는 push-down 대상 아님
             //   (5개 호출부 중 일부는 일반 턴 approach에 필수이므로 blanket gate 금지).
-            else if (!situation.IsExtraTurn && !hasMoveInPlan && needsMovement && ((canMove && remainingMP > 0) || hasGapClosers))
+            else if ((!situation.IsExtraTurn || situation.CurrentMP > 0) && !hasMoveInPlan && needsMovement && ((canMove && remainingMP > 0) || hasGapClosers))
             {
                 Log.Planning.Info($"[Support] Phase 9: Trying move (attack planned={didPlanAttack}, predictedMP={remainingMP:F1})");
                 // ★ v3.0.90: 공격 실패 시 forceMove=true로 이동 강제

@@ -1196,6 +1196,11 @@ namespace CompanionAI_v3.Core
             // ★ v3.8.48: 실행 시간 측정
             _profilerStopwatch.Restart();
 
+            // A planned EndTurn with movement left: give the end-of-turn move (cover / close in) its chance first.
+            if (nextAction.Type == ActionType.EndTurn
+                && TryBeginEndOfTurnReposition(unit, unitName, turnState, CombatAPI.GetCurrentMP(unit)))
+                return ExecutionResult.Continue();
+
             // 행동 실행
             Log.Engine.Info($"[Orchestrator] {unitName}: Executing {nextAction}");
             var result = _executor.Execute(nextAction, situation);
