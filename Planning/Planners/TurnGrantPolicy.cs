@@ -35,29 +35,30 @@ namespace CompanionAI_v3.Planning.Planners
             try
             {
                 if (!AbilityDatabase.IsTurnGrantAbility(grant)) return true;
-                if (!TryGetGrantedPoints(grant, out int ap, out int mp))
-                {
-                    // values not readable: don't block
-                    if (_unreadableLogged.Add(grant.Name ?? ""))
-                        Log.Planning.Info($"[TurnGrantPolicy] {grant.Name}: granted AP/MP not readable - not checking this grant");
-                    return true;
-                }
+                // Each value is null when it isn't a plain number (e.g. scales with a stat).
+                ReadGrantedPoints(grant, out int? ap, out int? mp, out string detail);
 
-                if (ap > 0 && mp <= 0)
+                // AP only: both values known.
+                if (ap > 0 && mp == 0)
                 {
                     if (CanHitFromCurrentPosition(target)) return true;
                     why = $"{target.CharacterName} can't hit any enemy from where they stand (bonus turn gives {ap} AP, no MP)";
                     return false;
                 }
 
-                if (mp > 0 && ap <= 0)
+                // Movement only: known to give no AP. The MP amount doesn't matter here.
+                if (ap == 0 && mp != 0)
                 {
                     if (CombatAPI.GetEffectiveRangePreference(target) == RangePreference.PreferMelee && CanHitFromCurrentPosition(target))
                     {
-                        why = $"{target.CharacterName} already has an enemy in melee reach (bonus turn gives {mp} MP, no AP)";
+                        why = $"{target.CharacterName} already has an enemy in melee reach (bonus turn gives movement, no AP)";
                         return false;
                     }
+                    return true;
                 }
+
+                if ((ap == null || mp == null) && _unreadableLogged.Add(grant.Name ?? ""))
+                    Log.Planning.Info($"[TurnGrantPolicy] {grant.Name}: granted points not fully readable ({detail}) - not checking this grant");
             }
             catch (Exception ex)
             {
@@ -66,25 +67,24 @@ namespace CompanionAI_v3.Planning.Planners
             return true;
         }
 
-        /// <summary>AP and MP the bonus turn gives. False when the ability has no turn grant or the values aren't simple numbers.</summary>
-        private static bool TryGetGrantedPoints(AbilityData grant, out int ap, out int mp)
+        /// <summary>AP and MP the bonus turn gives, each null when it isn't a plain number.</summary>
+        private static void ReadGrantedPoints(AbilityData grant, out int? ap, out int? mp, out string detail)
         {
-            ap = 0;
-            mp = 0;
+            ap = null;
+            mp = null;
+            detail = "no turn grant action";
             var actions = BlueprintCache.GetCachedRunAction(grant.Blueprint)?.Actions?.Actions;
-            if (actions == null) return false;
+            if (actions == null) return;
             foreach (var action in actions)
             {
                 if (!(action is ContextActionStartAdditionalTurn turn)) continue;
                 var apValue = GrantedAPField?.GetValue(turn) as ContextValue;
                 var mpValue = GrantedMPField?.GetValue(turn) as ContextValue;
-                if (apValue == null || mpValue == null) return false;
-                if (!apValue.IsValueSimple || !mpValue.IsValueSimple) return false;
-                ap = apValue.Value;
-                mp = mpValue.Value;
-                return true;
+                if (apValue != null && apValue.IsValueSimple) ap = apValue.Value;
+                if (mpValue != null && mpValue.IsValueSimple) mp = mpValue.Value;
+                detail = $"AP={(ap?.ToString() ?? apValue?.ValueType.ToString() ?? "missing")}, MP={(mp?.ToString() ?? mpValue?.ValueType.ToString() ?? "missing")}";
+                return;
             }
-            return false;
         }
 
         /// <summary>
