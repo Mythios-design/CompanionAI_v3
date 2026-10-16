@@ -72,6 +72,8 @@ namespace CompanionAI_v3.Planning.Planners
                     var kind = GetZoneKind(ability);
                     if (kind.HasValue && !zoneAbilities.ContainsKey(kind.Value)) zoneAbilities[kind.Value] = ability;
                 }
+                Log.Planning.Info($"[{roleName}] StrategistZonePlanner: zone abilities [{string.Join(", ", zoneAbilities.Keys)}], " +
+                    $"positional buffs available={situation.AvailablePositionalBuffs.Count}");
                 if (zoneAbilities.Count == 0) return result;
 
                 var existing = GetExistingZones(unit);
@@ -271,6 +273,8 @@ namespace CompanionAI_v3.Planning.Planners
                     if (e != null && e.IsConscious && allies.Any(a => kinds[a] == AllyKind.Melee && CombatAPI.GetDistanceInTiles(a, e) <= 4f))
                         anchors.Add(e.Position);
 
+            int triedCount = 0, emptyPatterns = 0, zeroValue = 0;
+            string firstError = null;
             foreach (var anchor in anchors)
             {
                 for (int dx = -CandidateSpreadTiles; dx <= CandidateSpreadTiles; dx++)
@@ -279,27 +283,53 @@ namespace CompanionAI_v3.Planning.Planners
                     {
                         var pos = anchor + new Vector3(dx * CombatAPI.GridCellSize, 0f, dz * CombatAPI.GridCellSize);
                         var node = pos.GetNearestNodeXZ() as CustomGridNodeBase;
-                        if (node == null || !node.Walkable || !tried.Add(node)) continue;
+                        if (node == null || !tried.Add(node)) continue;
+                        triedCount++;
 
-                        HashSet<CustomGridNodeBase> nodes;
-                        try
-                        {
-                            var pattern = areaBp.GetOrientedPattern(casterNode, node);
-                            if (pattern.IsEmpty) continue;
-                            nodes = new HashSet<CustomGridNodeBase>();
-                            foreach (var n in pattern.Nodes) if (n is CustomGridNodeBase cn) nodes.Add(cn);
-                        }
-                        catch { continue; }  // a tile the pattern can't be built on is just not a candidate
+                        var nodes = GetFootprint(ability, areaBp, casterNode, node, ref firstError);
+                        if (nodes == null || nodes.Count == 0) { emptyPatterns++; continue; }
 
                         float value = ScoreFootprint(kind, nodes, allies, kinds, enemies, out string who);
-                        if (value <= 0f) continue;
+                        if (value <= 0f) { zeroValue++; continue; }
                         if (hasExisting) value -= MoveThreshold;  // moving must beat keeping by a margin
                         found.Add(new ZoneOption { Kind = kind, Ability = ability, TargetNode = node, Nodes = nodes, Value = value, Who = who });
                     }
                 }
             }
 
+            Log.Planning.Info($"[StrategistZonePlanner] {kind}: anchors={anchors.Count}, tried={triedCount}, emptyFootprint={emptyPatterns}, " +
+                $"nobodyInside={zeroValue}, usable={found.Count}" + (firstError != null ? $", error={firstError}" : ""));
+
             return found.OrderByDescending(o => o.Value).Take(CandidatesPerZone).ToList();
+        }
+
+        /// <summary>
+        /// Tiles a zone would cover if aimed at targetNode. Uses the ability's own pattern (what the game shows
+        /// when targeting), falling back to the zone blueprint's oriented pattern.
+        /// </summary>
+        private static HashSet<CustomGridNodeBase> GetFootprint(AbilityData ability, BlueprintAbilityAreaEffect areaBp,
+            CustomGridNodeBase casterNode, CustomGridNodeBase targetNode, ref string firstError)
+        {
+            var nodes = new HashSet<CustomGridNodeBase>();
+            try
+            {
+                var pattern = CombatAPI.GetAffectedNodes(ability, targetNode.Vector3Position, casterNode.Vector3Position);
+                if (!pattern.IsEmpty)
+                    foreach (var n in pattern.Nodes) if (n is CustomGridNodeBase cn) nodes.Add(cn);
+            }
+            catch (Exception ex) { firstError = firstError ?? $"ability pattern: {ex.GetType().Name}: {ex.Message}"; }
+
+            if (nodes.Count > 0) return nodes;
+
+            try
+            {
+                var pattern = areaBp.GetOrientedPattern(casterNode, targetNode);
+                if (!pattern.IsEmpty)
+                    foreach (var n in pattern.Nodes) if (n is CustomGridNodeBase cn) nodes.Add(cn);
+            }
+            catch (Exception ex) { firstError = firstError ?? $"zone pattern: {ex.GetType().Name}: {ex.Message}"; }
+
+            return nodes;
         }
 
         private static List<ZoneOption> FindBestCombination(List<List<ZoneOption>> optionsByKind)

@@ -37,6 +37,31 @@ namespace CompanionAI_v3.GameInterface
         /// 수정: GetUnavailabilityReasons()로 쿨다운, 탄약, 충전 등 모두 체크
         /// ★ v3.1.11: 보너스 사용(런 앤 건 등) 처리 추가
         /// </summary>
+        // unit|ability|reasons|round already reported, so each reason shows once per round
+        private static readonly HashSet<string> _reportedUnavailable = new HashSet<string>();
+
+        /// <summary>
+        /// Reports why a weapon attack can't be used (once per round), so it's visible in the normal log
+        /// when a character unexpectedly stops attacking.
+        /// </summary>
+        private static void LogUnavailableWeaponAttack(BaseUnitEntity unit, AbilityData data, List<string> reasons)
+        {
+            try
+            {
+                if (data?.Weapon == null || reasons == null || reasons.Count == 0) return;
+                int round = Kingmaker.Game.Instance?.TurnController?.CombatRound ?? 0;
+                string reasonText = string.Join(", ", reasons);
+                string key = $"{unit.UniqueId}|{data.Blueprint?.AssetGuid}|{reasonText}|{round}";
+                if (!_reportedUnavailable.Add(key)) return;
+                if (_reportedUnavailable.Count > 500) _reportedUnavailable.Clear();
+                Log.Engine.Info($"[CombatAPI] {unit.CharacterName}: weapon attack {GetAbilityDisplayName(data)} unavailable — {reasonText}");
+            }
+            catch (Exception ex)
+            {
+                Log.Engine.Error(ex, "[CombatAPI] LogUnavailableWeaponAttack");
+            }
+        }
+
         public static List<AbilityData> GetAvailableAbilities(BaseUnitEntity unit)
         {
             if (unit == null) return new List<AbilityData>();
@@ -71,6 +96,7 @@ namespace CompanionAI_v3.GameInterface
                         if (!IsAbilityAvailable(data, out reasons))
                         {
                             if (Main.IsDebugEnabled) Log.Engine.Debug($"[CombatAPI] Filtered out {GetAbilityDisplayName(data)}: {string.Join(", ", reasons)}");
+                            LogUnavailableWeaponAttack(unit, data, reasons);
                             continue;
                         }
 
