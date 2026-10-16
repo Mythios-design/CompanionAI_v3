@@ -298,7 +298,8 @@ namespace CompanionAI_v3.Planning.Planners
         public static bool AllowHeal(AbilityData heal, BaseUnitEntity target)
         {
             if (!Is(heal, LARGE_MEDIKIT) || target == null) return true;
-            if (!IsBurningBladeActive(target)) return true;
+            // Burning-blade characters keep the Large Medikit for below 30% HP, whether or not the blade is lit.
+            if (!IsBurningBladeActive(target) && FindAbility(target, ORCHESTRATE_FLAMES) == null) return true;
             return CombatAPI.GetHPPercent(target) < LARGE_MEDIKIT_MAX_HP;
         }
 

@@ -100,6 +100,9 @@ namespace CompanionAI_v3.GameInterface
                             continue;
                         }
 
+                        // The AI never uses Desperate Measures (player rule).
+                        if (data.Blueprint?.IsDesperateMeasure == true) continue;
+
                         // ★ v3.5.32: 중복 그룹 체크 - 계획 단계에서 필터링
                         if (HasDuplicateAbilityGroups(data))
                         {

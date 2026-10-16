@@ -1329,6 +1329,11 @@ namespace CompanionAI_v3.Planning.Planners
                 {
                     // Doubles one zone but switches the others off this round: only worth it when the doubled
                     // zone gains more than the others lose.
+                    if (!StrategistZonePlanner.AllKnownZonesPlaced(situation.Unit))
+                    {
+                        Log.Planning.Info("[BuffPlanner] Combat Locus held — not all zones are placed yet (it would discharge them)");
+                        return null;
+                    }
                     var values = StrategistZonePlanner.GetExistingZoneValues(situation);
                     float total = values.Sum(v => v.value);
                     ZoneInfo pick = null;

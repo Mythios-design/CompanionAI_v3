@@ -31,7 +31,7 @@ namespace CompanionAI_v3.Planning.Planners
     /// </summary>
     public static class StrategistZonePlanner
     {
-        private const int CandidatesPerZone = 8;
+        private const int CandidatesPerZone = 20;
         private const int CandidateSpreadTiles = 2;      // try target tiles up to this far around each ally
         private const float MoveThreshold = 1.0f;        // a zone moves only for at least this much more value
 
@@ -104,6 +104,16 @@ namespace CompanionAI_v3.Planning.Planners
                     optionsByKind.Add(options);
                 }
 
+                // Zones already on the map that can't be moved right now (ability not available) are fixed
+                // obstacles: a new zone must not overlap them.
+                foreach (var pair in existing)
+                {
+                    if (zoneAbilities.ContainsKey(pair.Key)) continue;
+                    var fixedNodes = new HashSet<CustomGridNodeBase>();
+                    foreach (var n in pair.Value.CoveredNodes) if (n is CustomGridNodeBase cn) fixedNodes.Add(cn);
+                    optionsByKind.Add(new List<ZoneOption> { new ZoneOption { Kind = pair.Key, TargetNode = null, Nodes = fixedNodes, Value = 0f, Who = "fixed" } });
+                }
+
                 var best = FindBestCombination(optionsByKind);
                 if (best == null) return result;
 
@@ -151,7 +161,7 @@ namespace CompanionAI_v3.Planning.Planners
                 foreach (var pair in zoneAbilities)
                     usedGuids?.Add(pair.Value.Blueprint?.AssetGuid?.ToString() ?? pair.Value.Name);
 
-                foreach (var keep in best.Where(o => o != null && o.TargetNode == null))
+                foreach (var keep in best.Where(o => o != null && o.TargetNode == null && o.Who != "fixed"))
                     Log.Planning.Info($"[{roleName}] Zone {keep.Kind}: keeping current spot, value={keep.Value:F1} [{keep.Who}]");
             }
             catch (Exception ex)
@@ -163,6 +173,32 @@ namespace CompanionAI_v3.Planning.Planners
 
         /// <summary>True if this ability is a Frontline/Backline/Rear zone that this planner handles.</summary>
         public static bool IsZoneAbility(AbilityData ability) => GetZoneKind(ability).HasValue;
+
+        /// <summary>
+        /// True when every zone ability the unit knows has a zone on the map. Combat Locus discharges the
+        /// other zones for the round, so it should wait until they're all placed.
+        /// </summary>
+        public static bool AllKnownZonesPlaced(BaseUnitEntity unit)
+        {
+            try
+            {
+                var known = new HashSet<ZoneKind>();
+                var raw = unit?.Abilities?.RawFacts;
+                if (raw != null)
+                    foreach (var fact in raw)
+                    {
+                        var kind = GetZoneKind(fact?.Data);
+                        if (kind.HasValue) known.Add(kind.Value);
+                    }
+                var existing = GetExistingZones(unit);
+                return known.All(k => existing.ContainsKey(k));
+            }
+            catch (Exception ex)
+            {
+                Log.Planning.Error(ex, "[StrategistZonePlanner] AllKnownZonesPlaced failed");
+                return true;
+            }
+        }
 
         /// <summary>
         /// Value of each existing zone for Combat Locus: (kind, value, a point inside it).
@@ -300,7 +336,18 @@ namespace CompanionAI_v3.Planning.Planners
             Log.Planning.Info($"[StrategistZonePlanner] {kind}: anchors={anchors.Count}, tried={triedCount}, emptyFootprint={emptyPatterns}, " +
                 $"nobodyInside={zeroValue}, usable={found.Count}" + (firstError != null ? $", error={firstError}" : ""));
 
-            return found.OrderByDescending(o => o.Value).Take(CandidatesPerZone).ToList();
+            // Keep the best spots the game will actually accept (line of sight, range, etc.).
+            var usable = new List<ZoneOption>();
+            int rejected = 0;
+            foreach (var option in found.OrderByDescending(o => o.Value))
+            {
+                if (usable.Count >= CandidatesPerZone) break;
+                if (CombatAPI.CanUseAbilityOn(ability, new TargetWrapper(option.TargetNode.Vector3Position), out _)) usable.Add(option);
+                else rejected++;
+            }
+            if (rejected > 0)
+                Log.Planning.Info($"[StrategistZonePlanner] {kind}: {rejected} top spots rejected by the game (line of sight/range)");
+            return usable;
         }
 
         /// <summary>

@@ -748,7 +748,8 @@ namespace CompanionAI_v3.Planning.Plans
 
             // Strategist zones (Frontline/Backline/Rear) are placed together and cost no AP.
             var zoneActions = Planners.StrategistZonePlanner.PlanZones(situation, usedBuffGuids, RoleName);
-            actions.AddRange(zoneActions);
+            // Zones cost no AP: put them first so they happen even if the turn ends when AP runs out.
+            actions.InsertRange(0, zoneActions);
             _plannedZoneMovesThisPlan = zoneActions.Count;
 
             int positionalBuffCount = zoneActions.Count;

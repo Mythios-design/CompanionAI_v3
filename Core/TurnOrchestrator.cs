@@ -1017,12 +1017,21 @@ namespace CompanionAI_v3.Core
                 {
                     Log.Engine.Info($"[Orchestrator] {unitName}: AP=0 but Move pending with MP={currentMP:F1} - continuing");
                 }
+                else if (pendingAction?.Ability != null && CombatAPI.GetAbilityAPCost(pendingAction.Ability) <= 0f
+                    && CombatAPI.IsAbilityAvailable(pendingAction.Ability, out _))
+                {
+                    Log.Engine.Info($"[Orchestrator] {unitName}: AP=0 but free action pending ({pendingAction.Ability.Name}) - continuing");
+                }
                 // ★ v3.5.88: 0 AP 공격이 있으면 계속 진행 (Break Through → Slash 등)
                 // ★ v3.9.10: 단순 존재 확인이 아닌 사거리 도달 가능성까지 검증
                 // 0 AP 공격이 있어도 MP로 도달 불가하면 무한 이동 루프 방지를 위해 턴 종료
                 else if (CombatAPI.HasZeroAPAttack(unit) && CombatAPI.CanAnyZeroAPAttackReachEnemy(unit, currentMP))
                 {
                     Log.Engine.Info($"[Orchestrator] {unitName}: AP=0 but 0 AP attacks reachable (MP={currentMP:F1}) - continuing");
+                }
+                else if (turnState.EndOfTurnRepositionPending)
+                {
+                    // The end-of-turn move is being planned; don't end the turn underneath it.
                 }
                 else if (TryBeginEndOfTurnReposition(unit, unitName, turnState, currentMP))
                 {
