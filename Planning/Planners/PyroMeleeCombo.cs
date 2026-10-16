@@ -18,7 +18,7 @@ namespace CompanionAI_v3.Planning.Planners
     /// (Shape Flames) and a melee weapon — e.g. Heinrix. Recognised by ability ID, not by character name.
     ///
     ///   Setup (once, normally on the first turn):
-    ///     Endure (if no temporary wounds) → Ignite self (only with temporary wounds) → Orchestrate Flames self.
+    ///     Endure (if no temporary wounds) → Ignite self (only with temporary wounds and HP at 90%+) → Orchestrate Flames self.
     ///     The character then burns for the rest of the fight at half damage, and every melee hit deals full
     ///     burning damage to its target.
     ///   While active:
@@ -48,7 +48,7 @@ namespace CompanionAI_v3.Planning.Planners
         private const string ORCHESTRATE_FLAMES_BUFF = "123d1d6d75394528b1955bb4c3b88103";
         private const string BURNING_BUFF = "3ddbf131cbd54087a665d4b2e026b0f2";
 
-        private const float SETUP_MIN_HP = 50f;            // don't start burning yourself below this
+        private const float SETUP_MIN_HP = 90f;            // never ignite yourself below this HP, temporary wounds or not
         private const float LARGE_MEDIKIT_MAX_HP = 30f;    // Large Medikit (removes burning) only below this
         private const int DARING_BREACH_MIN_ENEMIES = 2;
         private const string GROUP_TAG = "BurningBladeSetup";
@@ -326,6 +326,11 @@ namespace CompanionAI_v3.Planning.Planners
                 if (Is(ability, ORCHESTRATE_FLAMES) && target != caster)
                 {
                     reason = "Orchestrate Flames is reserved for the burning blade setup";
+                    return false;
+                }
+                if (Is(ability, IGNITE) && target == caster && CombatAPI.GetHPPercent(caster) < SETUP_MIN_HP)
+                {
+                    reason = $"HP {CombatAPI.GetHPPercent(caster):F0}% below {SETUP_MIN_HP:F0}%, not igniting self";
                     return false;
                 }
                 if (Is(ability, IGNITE) && target == caster && TemporaryWounds(caster) <= 0)

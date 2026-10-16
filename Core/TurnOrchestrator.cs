@@ -1773,6 +1773,18 @@ namespace CompanionAI_v3.Core
             ResetPerTurnCaches();
         }
 
+        /// <summary>
+        /// The game's interrupt-turn start event: drop whatever turn state the unit has (including one from a
+        /// bonus turn just before this one) so the bonus turn plans from scratch.
+        /// </summary>
+        public void OnBonusTurnStartEvent(BaseUnitEntity unit)
+        {
+            if (unit == null) return;
+            bool hadState = _turnStates.Remove(unit.UniqueId);
+            OnBonusTurnStart(unit);
+            Log.Engine.Info($"[Orchestrator] Bonus turn started for {unit.CharacterName} (via event{(hadState ? ", previous turn state dropped" : "")})");
+        }
+
         private void ResetPerTurnCaches()
         {
             // ★ v3.5.29: 전투 캐시 초기화 (거리/타겟팅)

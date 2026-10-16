@@ -17,7 +17,7 @@ namespace CompanionAI_v3.GameInterface
     /// ★ v3.0.76: 게임의 턴 이벤트를 직접 구독
     /// AP 기반 추측 대신 게임 이벤트 활용
     /// </summary>
-    public class TurnEventHandler : ITurnStartHandler, ITurnEndHandler, ITurnBasedModeHandler
+    public class TurnEventHandler : ITurnStartHandler, ITurnEndHandler, ITurnBasedModeHandler, IInterruptTurnStartHandler
     {
         private static TurnEventHandler _instance;
         private bool _isSubscribed = false;
@@ -86,6 +86,21 @@ namespace CompanionAI_v3.GameInterface
 
             // ★ v3.10.0: 디시전 노드 도달 추적 초기화
             CustomBehaviourTreePatch.ClearDecisionNodeTracking(unit.UniqueId);
+        }
+
+        /// <summary>
+        /// IInterruptTurnStartHandler - a bonus turn (Bring It Down!, Move, Move, Move! etc.) starts. These fire no
+        /// ITurnStartHandler, and one can follow another, so each needs its own fresh turn state.
+        /// </summary>
+        public void HandleUnitStartInterruptTurn(InterruptionData interruptionData)
+        {
+            if (!Main.Enabled) return;
+
+            var unit = EventInvokerExtensions.MechanicEntity as BaseUnitEntity;
+            if (unit == null || TurnOrchestrator.IsShipAIDelegated(unit)) return;
+            if (!TurnOrchestrator.Instance.ShouldControl(unit)) return;
+
+            TurnOrchestrator.Instance.OnBonusTurnStartEvent(unit);
         }
 
         /// <summary>
