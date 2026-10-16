@@ -199,6 +199,35 @@ namespace CompanionAI_v3.GameInterface
             }
         }
 
+        private static void AppendWeaponSets(StringBuilder sb, BaseUnitEntity unit)
+        {
+            var sets = unit.Body?.HandsEquipmentSets;
+            int current = unit.Body?.CurrentHandEquipmentSetIndex ?? -1;
+            sb.AppendLine($"  WEAPON SETS ({sets?.Count ?? 0}, active = Set {current}, rotation setting = " +
+                $"{(Settings.ModSettings.Instance?.GetOrCreateSettings(unit.UniqueId, unit.CharacterName)?.EnableWeaponSetRotation == true ? "ON" : "off")}):");
+            if (sets == null) return;
+            for (int i = 0; i < sets.Count; i++)
+            {
+                var set = sets[i];
+                if (set == null) continue;
+                foreach (var (hand, slot) in new[] { ("primary", set.PrimaryHand), ("secondary", set.SecondaryHand) })
+                {
+                    var weapon = slot?.MaybeItem as Kingmaker.Items.ItemEntityWeapon;
+                    if (weapon == null) continue;
+                    var bp = weapon.Blueprint;
+                    string kind = bp.IsMelee ? "melee" : "ranged";
+                    string ammo = bp.IsMelee ? "" : $", ammo {weapon.CurrentAmmo}/{bp.WarhammerMaxAmmo}, rate of fire {bp.RateOfFire}";
+                    sb.AppendLine($"    Set {i}{(i == current ? " [ACTIVE]" : "")} {hand}: {weapon.Name} ({kind}, range {weapon.AttackRange}{ammo}) — " +
+                        WeaponSetAnalyzer.EngagedRatingText(WeaponSetAnalyzer.GetEngagedRating(weapon)));
+                    foreach (var wa in bp.WeaponAbilities.All)
+                    {
+                        if (wa == null || wa.IsNone || wa.Ability == null) continue;
+                        sb.AppendLine($"      - {wa.Ability.Name} [{wa.Type}, {wa.AP} AP] next to enemies: {wa.Ability.UsingInThreateningArea}");
+                    }
+                }
+            }
+        }
+
         /// <summary>
         /// 전체 파티의 모든 능력 덤프 (상세 버전)
         /// </summary>
@@ -305,6 +334,10 @@ namespace CompanionAI_v3.GameInterface
                         catch { }  // diagnostic output only
                         sb.AppendLine();
                     }
+
+                    // Both weapon sets, including the inactive one, and what each attack can do with an enemy adjacent.
+                    try { AppendWeaponSets(sb, unit); }
+                    catch (Exception ex) { sb.AppendLine($"  WEAPON SETS: error {ex.Message}"); }
 
                     // Active buffs (name | GUID) — used to recognise combo states such as self-applied burning
                     try

@@ -42,7 +42,63 @@ namespace CompanionAI_v3.Data
 
             /// <summary>무기 존재 여부 (원거리 또는 근거리)</summary>
             public bool HasWeapons => HasRangedWeapon || HasMeleeWeapon;
+
+            /// <summary>
+            /// How well this set attacks with an enemy adjacent: 0 = can't, 1 = can but provokes an attack of
+            /// opportunity, 2 = can freely (melee weapons, and guns whose attacks allow it).
+            /// </summary>
+            public int EngagedRating { get; set; }
         }
+
+        /// <summary>How well a weapon attacks with an enemy adjacent (see EngagedRating).</summary>
+        public static int GetEngagedRating(ItemEntityWeapon weapon)
+        {
+            if (weapon?.Blueprint == null) return 0;
+            if (weapon.Blueprint.IsMelee) return 2;
+            int best = 0;
+            try
+            {
+                foreach (var wa in weapon.Blueprint.WeaponAbilities.All)
+                {
+                    if (wa == null || wa.IsNone) continue;
+                    if (wa.Type == Kingmaker.Blueprints.Items.Equipment.WeaponAbilityType.Reload) continue;
+                    var ability = wa.Ability;
+                    if (ability == null) continue;
+                    switch (ability.UsingInThreateningArea)
+                    {
+                        case Kingmaker.UnitLogic.Abilities.Blueprints.BlueprintAbility.UsingInThreateningAreaType.CanUseWithoutAOO:
+                            best = Math.Max(best, 2); break;
+                        case Kingmaker.UnitLogic.Abilities.Blueprints.BlueprintAbility.UsingInThreateningAreaType.WillCauseAOO:
+                            best = Math.Max(best, 1); break;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Persistence.Error(ex, "[WeaponSetAnalyzer] GetEngagedRating");
+            }
+            return best;
+        }
+
+        // The set each character started the combat with: their main loadout, which they return to when the
+        // reason for switching (an adjacent enemy) has gone.
+        private static readonly Dictionary<string, int> _homeSets = new Dictionary<string, int>();
+
+        public static int GetHomeSet(BaseUnitEntity unit)
+        {
+            if (unit == null) return 0;
+            if (!_homeSets.TryGetValue(unit.UniqueId, out int set))
+            {
+                set = unit.Body?.CurrentHandEquipmentSetIndex ?? 0;
+                _homeSets[unit.UniqueId] = set;
+            }
+            return set;
+        }
+
+        public static void ResetHomeSets() => _homeSets.Clear();
+
+        public static string EngagedRatingText(int rating) =>
+            rating >= 2 ? "usable next to enemies" : rating == 1 ? "usable next to enemies (provokes attack)" : "not usable next to enemies";
 
         // ★ 정적 버퍼 — GC 할당 방지
         private static readonly WeaponSetAbilities[] _cachedResults = new WeaponSetAbilities[2]
@@ -76,6 +132,7 @@ namespace CompanionAI_v3.Data
                 _cachedResults[i].HasMeleeWeapon = false;
                 _cachedResults[i].PrimaryWeaponName = null;
                 _cachedResults[i].PrimaryWeaponRange = 0;
+                _cachedResults[i].EngagedRating = 0;
             }
 
             try
@@ -96,6 +153,7 @@ namespace CompanionAI_v3.Data
                     var secondaryWeapon = equipSet.SecondaryHand?.MaybeItem as ItemEntityWeapon;
 
                     result.PrimaryWeaponName = primaryWeapon?.Name;
+                    result.EngagedRating = Math.Max(GetEngagedRating(primaryWeapon), GetEngagedRating(secondaryWeapon));
 
                     // 원거리/근거리 판정 + 사거리
                     if (primaryWeapon != null)

@@ -212,6 +212,7 @@ namespace CompanionAI_v3.Analysis
             try
             {
                 situation.CurrentWeaponSetIndex = CombatAPI.GetCurrentWeaponSetIndex(unit);
+                WeaponSetAnalyzer.GetHomeSet(unit);  // remember the starting loadout
                 situation.WeaponSetData = WeaponSetAnalyzer.AnalyzeBothSets(unit);
 
                 if (situation.WeaponSetData == null) return;

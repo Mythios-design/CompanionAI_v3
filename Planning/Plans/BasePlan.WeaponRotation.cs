@@ -66,6 +66,9 @@ namespace CompanionAI_v3.Planning.Plans
         {
             if (situation.WeaponSetData == null) return false;
 
+            var engagement = EngagementSwitchDecision(situation);
+            if (engagement.HasValue) return engagement.Value;
+
             int currentIdx = situation.CurrentWeaponSetIndex;
             int altIdx = currentIdx == 0 ? 1 : 0;
 
@@ -86,8 +89,8 @@ namespace CompanionAI_v3.Planning.Plans
                 return true;
             }
 
-            // Case 2: 재장전 필요 + 대체 세트에 무기 있음
-            if (situation.NeedsReload && altSet.HasWeapons)
+            // Case 2: 재장전 필요 + 대체 세트에 무기 있음 — unless reloading still leaves AP to attack.
+            if (situation.NeedsReload && altSet.HasWeapons && !CanReloadAndStillAttack(situation))
             {
                 if (Main.IsDebugEnabled) Log.Planning.Debug($"[{RoleName}] ShouldSwitchFirst: needs reload, alt has weapons");
                 return true;
@@ -151,6 +154,9 @@ namespace CompanionAI_v3.Planning.Plans
         {
             if (situation.WeaponSetData == null || !situation.HasHittableEnemies)
                 return false;
+
+            var engagement = EngagementSwitchDecision(situation);
+            if (engagement.HasValue) return engagement.Value;
 
             int currentIdx = situation.CurrentWeaponSetIndex;
             int altIdx = currentIdx == 0 ? 1 : 0;
@@ -218,6 +224,72 @@ namespace CompanionAI_v3.Planning.Plans
             return false;
         }
 
+        /// <summary>True when a conscious enemy is adjacent (within melee threat range).</summary>
+        protected static bool IsEngaged(Situation situation)
+        {
+            if (situation?.Enemies == null || situation.Unit == null) return false;
+            foreach (var enemy in situation.Enemies)
+            {
+                if (enemy == null || !enemy.IsConscious || enemy.LifeState.IsDead) continue;
+                if (CombatAPI.GetDistanceInTiles(situation.Unit, enemy) <= 1.5f) return true;
+            }
+            return false;
+        }
+
+        /// <summary>
+        /// Switching driven by adjacent enemies:
+        ///  - Engaged and the other set attacks better next to enemies (e.g. shotgun or pistol vs rifle) → switch.
+        ///  - Engaged and the other set is no better → don't switch (never swap to a rifle that can't fire).
+        ///  - Not engaged, on the backup set, and the main loadout can reach an enemy → switch back.
+        /// Returns null when this rule has no opinion and the other switch rules decide.
+        /// </summary>
+        protected bool? EngagementSwitchDecision(Situation situation)
+        {
+            var data = situation.WeaponSetData;
+            if (data == null || data.Length < 2) return null;
+            int cur = situation.CurrentWeaponSetIndex;
+            int alt = cur == 0 ? 1 : 0;
+            var curSet = data[cur];
+            var altSet = data[alt];
+            if (!altSet.HasWeapons) return null;
+
+            if (IsEngaged(situation))
+            {
+                if (altSet.EngagedRating > curSet.EngagedRating)
+                {
+                    Log.Planning.Info($"[{RoleName}] Weapon switch: enemy adjacent — {curSet.PrimaryWeaponName} " +
+                        $"({Data.WeaponSetAnalyzer.EngagedRatingText(curSet.EngagedRating)}) → {altSet.PrimaryWeaponName} " +
+                        $"({Data.WeaponSetAnalyzer.EngagedRatingText(altSet.EngagedRating)})");
+                    return true;
+                }
+                if (altSet.EngagedRating < curSet.EngagedRating) return false;
+                return null;
+            }
+
+            int home = Data.WeaponSetAnalyzer.GetHomeSet(situation.Unit);
+            if (cur != home && alt == home)
+            {
+                float nearest = situation.NearestEnemyDistanceTiles;
+                bool homeReaches = (altSet.HasRangedWeapon && altSet.PrimaryWeaponRange > 0 && nearest <= altSet.PrimaryWeaponRange)
+                    || (altSet.HasMeleeWeapon && nearest <= situation.CurrentMP + 2f);
+                if (homeReaches)
+                {
+                    Log.Planning.Info($"[{RoleName}] Weapon switch: no enemy adjacent — back to main weapon {altSet.PrimaryWeaponName}");
+                    return true;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>True when reloading the current weapon still leaves enough AP to attack with it.</summary>
+        private static bool CanReloadAndStillAttack(Situation situation)
+        {
+            var reload = situation.ReloadAbility;
+            if (reload == null || situation.HasReloadedThisTurn) return false;
+            float reloadCost = CombatAPI.GetAbilityAPCost(reload);
+            return situation.CurrentAP >= reloadCost + 1f;
+        }
+
         /// <summary>
         /// ★ v3.9.74: 대체 무기가 현재 위치에서 적에게 도달 가능한지 판단
         /// Phase 9.5 (Switch-After) 전용 — 전환 후 공격 가능 여부 사전 확인
@@ -239,6 +311,13 @@ namespace CompanionAI_v3.Planning.Plans
             if (!altSet.HasWeapons) return false;
 
             float enemyDist = situation.NearestEnemyDistance;
+
+            // With an enemy adjacent, only a weapon that works next to enemies is worth switching to.
+            if (IsEngaged(situation) && altSet.EngagedRating == 0)
+            {
+                Log.Planning.Info($"[{RoleName}] Weapon switch-after skipped — {altSet.PrimaryWeaponName} can't attack with an enemy adjacent");
+                return false;
+            }
 
             // 원거리 대체 무기: 사거리 내 확인
             if (altSet.HasRangedWeapon && altSet.PrimaryWeaponRange > 0)
