@@ -58,13 +58,10 @@ namespace CompanionAI_v3.Planning.Planners
                 if (CombatAPI.GetDistanceInTiles(caster, enemy) > radius) continue;
                 inArea++;
 
-                if (HasAnyBuff(enemy, buffs)) { held++; continue; }
-
-                if (exposedMap != null && exposedMap.TryGetValue(enemy.UniqueId, out int lastRound)
-                    && round - lastRound < RetryAfterRounds)
+                switch (GetHold(caster, enemy, buffs, exposedMap, round))
                 {
-                    recentlyResisted++;
-                    continue;
+                    case Hold.Taunted: held++; continue;
+                    case Hold.RecentlyResisted: recentlyResisted++; continue;
                 }
 
                 reason = $"{enemy.CharacterName} not taunted yet";
@@ -75,6 +72,30 @@ namespace CompanionAI_v3.Planning.Planners
                 ? "no enemies in range"
                 : $"all {inArea} enemies in range already taunted ({held}) or recently resisted ({recentlyResisted})";
             return false;
+        }
+
+        /// <summary>
+        /// True when this enemy is already taunted by the ability, or resisted it recently, so it isn't a
+        /// reason to cast the taunt again.
+        /// </summary>
+        public static bool IsHeld(BaseUnitEntity caster, AbilityData taunt, BaseUnitEntity enemy)
+        {
+            var buffs = AbilityBuffMap.Get(taunt?.Blueprint)?.TargetBuffs;
+            if (caster == null || enemy == null || buffs == null || buffs.Count == 0) return false;
+            _exposed.TryGetValue(caster.UniqueId, out var exposedMap);
+            return GetHold(caster, enemy, buffs, exposedMap, CurrentRound) != Hold.None;
+        }
+
+        private enum Hold { None, Taunted, RecentlyResisted }
+
+        private static Hold GetHold(BaseUnitEntity caster, BaseUnitEntity enemy,
+            List<Kingmaker.UnitLogic.Buffs.Blueprints.BlueprintBuff> buffs, Dictionary<string, int> exposedMap, int round)
+        {
+            if (HasAnyBuff(enemy, buffs)) return Hold.Taunted;
+            if (exposedMap != null && exposedMap.TryGetValue(enemy.UniqueId, out int lastRound)
+                && round - lastRound < RetryAfterRounds)
+                return Hold.RecentlyResisted;
+            return Hold.None;
         }
 
         /// <summary>Remember which enemies were caught by a taunt that was just cast.</summary>

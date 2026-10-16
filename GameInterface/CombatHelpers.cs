@@ -270,6 +270,12 @@ namespace CompanionAI_v3.GameInterface
             if (IsGrenadeOrExplosive(ability))
                 return WeaponAttackType.Grenade;
 
+            // Melee first: a single melee strike reports as "single shot" and a melee sweep as an area
+            // attack, which made melee weapon attacks look ranged. Melee characters then had every weapon
+            // attack filtered out whenever Charge was available.
+            if (ability.IsMelee)
+                return WeaponAttackType.Melee;
+
             // AttackCategory → WeaponAttackType 매핑
             switch (category)
             {
@@ -356,7 +362,20 @@ namespace CompanionAI_v3.GameInterface
                     break;
 
                 case WeaponAttackType.Melee:
-                    priority = isWeaponAttack ? 10 : 55;
+                    if (ability.IsAOE || CombatAPI.GetPatternInfo(ability)?.IsValid == true)
+                    {
+                        // Melee sweeps (Cleave etc.): same preference as other area attacks.
+                        if (enemiesNear >= 2 && alliesNear <= 2)
+                            priority = isWeaponAttack ? 3 : 40;
+                        else if (alliesNear > 2)
+                            priority = 200;
+                        else
+                            priority = isWeaponAttack ? 25 : 70;
+                    }
+                    else
+                    {
+                        priority = isWeaponAttack ? 10 : 55;
+                    }
                     break;
 
                 default:

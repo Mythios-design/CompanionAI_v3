@@ -939,14 +939,16 @@ namespace CompanionAI_v3.Core
         #region ProcessTurn Sub-Methods (v3.5.36)
 
         /// <summary>
-        /// Before ending a ranged character's turn with MP left, give them one chance to move somewhere
-        /// safer. Returns true when a reposition plan should be built from a fresh analysis.
+        /// Before ending a turn with MP left, give ranged characters one chance to move somewhere safer and
+        /// melee characters one chance to close on the enemy. Returns true when that move should be planned
+        /// from a fresh analysis.
         /// </summary>
         private bool TryBeginEndOfTurnReposition(BaseUnitEntity unit, string unitName, TurnState turnState, float currentMP)
         {
             if (turnState.EndOfTurnRepositionDone || turnState.MovementBlockedThisTurn) return false;
             if (currentMP <= 0f) return false;
-            if (CombatAPI.GetRangePreference(unit) != Settings.RangePreference.PreferRanged) return false;
+            var preference = CombatAPI.GetRangePreference(unit);
+            if (preference != Settings.RangePreference.PreferRanged && preference != Settings.RangePreference.PreferMelee) return false;
 
             turnState.EndOfTurnRepositionDone = true;
             turnState.EndOfTurnRepositionPending = true;
@@ -960,10 +962,12 @@ namespace CompanionAI_v3.Core
         {
             turnState.EndOfTurnRepositionPending = false;
 
-            var move = CompanionAI_v3.Planning.Planners.MovementPlanner.PlanEndOfTurnReposition(situation);
+            var move = situation.RangePreference == Settings.RangePreference.PreferMelee
+                ? CompanionAI_v3.Planning.Planners.MovementPlanner.PlanEndOfTurnAdvance(situation)
+                : CompanionAI_v3.Planning.Planners.MovementPlanner.PlanEndOfTurnReposition(situation);
             if (move == null)
             {
-                Log.Engine.Info($"[Orchestrator] {unitName}: No safer tile reachable - ending turn");
+                Log.Engine.Info($"[Orchestrator] {unitName}: No end-of-turn move needed - ending turn");
                 return ExecutionResult.EndTurn("Plan complete");
             }
 

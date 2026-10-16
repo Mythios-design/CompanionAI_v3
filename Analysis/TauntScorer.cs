@@ -239,6 +239,8 @@ namespace CompanionAI_v3.Analysis
                     if (enemy == null || !enemy.IsConscious) continue;
                     // ★ v3.42.0: 면역 적 제외 — 도발해도 무의미한 대상 (무조건적 면역만 체크)
                     if (CombatAPI.IsTargetUnconditionallyImmune(enemy)) continue;
+                    // Already taunted by this ability, or resisted it recently: not a reason to cast again.
+                    if (Planning.Planners.TauntTracker.IsHeld(tank, taunt, enemy)) continue;
                     // ★ v3.6.24: AOE 중심점에서 거리 계산 (캐스터 위치가 아님!)
                     float distTiles = CombatAPI.MetersToTiles(Vector3.Distance(aoeCenterForPrediction, enemy.Position));
                     if (distTiles <= effectiveRadiusTiles)

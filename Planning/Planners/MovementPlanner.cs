@@ -1657,6 +1657,60 @@ namespace CompanionAI_v3.Planning.Planners
             return PlannedAction.Move(best.Position, $"End-of-turn reposition ({verdict})");
         }
 
+        /// <summary>
+        /// End-of-turn advance for melee characters: their actions are spent but MP is left and no enemy is
+        /// within melee reach, so move as close as possible to the nearest enemy (adjacent if reachable).
+        /// </summary>
+        public static PlannedAction PlanEndOfTurnAdvance(Situation situation)
+        {
+            if (situation?.Unit == null) return null;
+            if (situation.RangePreference != Settings.RangePreference.PreferMelee) return null;
+            if (!situation.CanMove || situation.CurrentMP <= 0f) return null;
+            if (!situation.HasLivingEnemies || situation.Enemies == null) return null;
+
+            var unit = situation.Unit;
+            float meleeRange = GetUnitMeleeRange(unit);
+
+            BaseUnitEntity target = null;
+            float targetDist = float.MaxValue;
+            foreach (var enemy in situation.Enemies)
+            {
+                if (enemy == null || !enemy.IsConscious || enemy.LifeState.IsDead) continue;
+                if (CombatAPI.IsTargetImmuneToDamage(enemy, unit)) continue;
+                float d = CombatAPI.GetDistanceInTiles(unit, enemy);
+                if (d <= meleeRange + 0.5f)
+                {
+                    Log.Planning.Info($"[MovementPlanner] {unit.CharacterName}: End-of-turn advance not needed ({enemy.CharacterName} already in melee reach)");
+                    return null;
+                }
+                if (d < targetDist) { targetDist = d; target = enemy; }
+            }
+            if (target == null) return null;
+
+            AIRole role = situation.CharacterSettings?.Role ?? AIRole.Auto;
+            var best = MovementAPI.FindMeleeAttackPositionSync(unit, target, meleeRange, situation.CurrentMP, role,
+                null, situation.Enemies, situation.LastMoveOrigin);
+            string how = "into melee reach";
+            if (best == null)
+            {
+                best = MovementAPI.FindBestApproachPosition(unit, target, situation.CurrentMP);
+                how = "closer";
+            }
+            if (best == null || best.Node == null) return null;
+
+            float newDist = CombatAPI.GetDistanceInTiles(best.Position, target);
+            if (newDist >= targetDist - 1f)
+            {
+                Log.Planning.Info($"[MovementPlanner] {unit.CharacterName}: End-of-turn advance skipped (best tile {newDist:F1}t vs now {targetDist:F1}t from {target.CharacterName})");
+                return null;
+            }
+
+            Log.Planning.Info($"[MovementPlanner] {unit.CharacterName}: End-of-turn advance {how} toward {target.CharacterName} " +
+                $"({targetDist:F1}t → {newDist:F1}t, MP={situation.CurrentMP:F1})");
+            Core.TeamBlackboard.Instance?.ReserveMovePosition(best.Position);
+            return PlannedAction.Move(best.Position, $"End-of-turn advance toward {target.CharacterName}");
+        }
+
         private struct TileSafety
         {
             public int MeleeReach;

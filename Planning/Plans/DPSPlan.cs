@@ -1073,6 +1073,16 @@ namespace CompanionAI_v3.Planning.Plans
                 Log.Planning.Info("[DPS] Phase 8: Prioritizing retreat (attack-then-retreat strategy from previous plan)");
             }
             bool needsMovement = ((situation.NeedsReposition || (!didPlanAttack && situation.HasLivingEnemies)) && !noAttackNoApproach) || isRangedInDanger || deferRetreat;
+
+            // A wounded ranged character with no AP left can't shoot this turn anyway; walking toward the
+            // enemy only exposes them. Leave the MP for the end-of-turn reposition, which looks for safety.
+            float healAt = situation.CharacterSettings?.HealAtHPPercent ?? 50f;
+            if (needsMovement && !isRangedInDanger && !deferRetreat && situation.PrefersRanged
+                && remainingAP < 1f && situation.HPPercent < healAt)
+            {
+                needsMovement = false;
+                Log.Planning.Info($"[DPS] Phase 8: No approach — wounded (HP={situation.HPPercent:F0}%) with no AP to attack; saving MP for a safe reposition");
+            }
             // ★ v3.0.99: situation.CanMove는 계획 시작 시점 MP 기준, remainingMP는 예측된 MP 포함
             bool canMove = situation.CanMove || remainingMP > 0;
             // ★ v3.9.22: GapCloser(돌격 등)는 AP 기반 — MP 없어도 사용 가능
@@ -1089,7 +1099,9 @@ namespace CompanionAI_v3.Planning.Plans
             //   v3.111.13: 유지 이유 — 이 분기는 PlanMoveOrGapCloser(gap-closer 포함)를 호출하는데
             //   PlanMoveOrGapCloser는 5개 호출부 중 일반 턴 approach에 필수인 경로가 있어
             //   blanket push-down 금지. 본 분기만 ExtraTurn에서 스킵.
-            if (situation.IsExtraTurn && !hasMoveInPlan && needsMovement)
+            // Melee characters with movement are the exception: closing in is exactly what they should do.
+            bool meleeCanClose = situation.RangePreference == Settings.RangePreference.PreferMelee && remainingMP > 0;
+            if (situation.IsExtraTurn && !hasMoveInPlan && needsMovement && !meleeCanClose)
             {
                 Log.Planning.Info($"[DPS] Phase 8: Skip reposition — extra turn (AP={situation.CurrentAP:F1}, MP={situation.CurrentMP:F1})");
             }
