@@ -44,6 +44,7 @@ namespace CompanionAI_v3.UI
         // ── State ────────────────────────────────────────────────
         private static string _selectedCharacterId = "";
         private static CharacterSettings _editingSettings = null;
+        private static string _abilityDumpStatus = null;
         private static Vector2 _scrollPosition = Vector2.zero;
         private static bool _showAdvancedSettings = false;  // ★ v3.5.13: 고급 설정 접기/펴기
 
@@ -422,6 +423,21 @@ namespace CompanionAI_v3.UI
             Main.Settings.EnableDebugLogging = DrawCheckbox(Main.Settings.EnableDebugLogging, L("EnableDebugLogging"));
             UIStyles.Space(UIStyles.SpaceSM);
             Main.Settings.ShowAIThoughts = DrawCheckbox(Main.Settings.ShowAIThoughts, L("ShowAIDecisionLog"));
+
+            // Party ability dump — writes AllAbilities_Dump.txt to the mod folder
+            UIStyles.Space(UIStyles.SpaceMD);
+            GUILayout.BeginHorizontal();
+            if (GUILayout.Button($"<color={UIStyles.Gold}>Dump party abilities</color>", UIStyles.Button,
+                    GUILayout.Width(UIStyles.Sd(180)), GUILayout.Height(UIStyles.Sd(24))))
+            {
+                GameInterface.AbilityDumper.DumpAllPartyAbilities();
+                _abilityDumpStatus = $"Saved AllAbilities_Dump.txt at {DateTime.Now:HH:mm:ss}";
+            }
+            if (!string.IsNullOrEmpty(_abilityDumpStatus))
+                GUILayout.Label($"<color={UIStyles.TextMid}>{_abilityDumpStatus}</color>", UIStyles.Label);
+            GUILayout.FlexibleSpace();
+            GUILayout.EndHorizontal();
+            GUILayout.Label($"<color={UIStyles.TextMid}>Writes every party member's abilities (targeting, AP cost, range, cooldown, description) and active buffs to AllAbilities_Dump.txt in the mod folder.</color>", UIStyles.Description);
 
             UIStyles.Space(UIStyles.SpaceMD);
             UIStyles.DrawDivider();

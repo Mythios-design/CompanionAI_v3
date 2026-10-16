@@ -8,6 +8,7 @@ using Kingmaker.EntitySystem.Entities;
 using Kingmaker.Enums;
 using Kingmaker.UnitLogic.Abilities;
 using Kingmaker.UnitLogic.Parts;
+using CompanionAI_v3.Data;
 using CompanionAI_v3.Logging;
 
 namespace CompanionAI_v3.GameInterface
@@ -275,8 +276,35 @@ namespace CompanionAI_v3.GameInterface
                         sb.AppendLine($"      CanTargetPoint: {bp.CanTargetPoint}");
                         sb.AppendLine($"      IsMelee: {ability.IsMelee}");
                         sb.AppendLine($"      APCost: {CombatAPI.GetAbilityAPCost(ability):F1}");
+                        try { sb.AppendLine($"      Range: {ability.MinRangeCells}-{ability.RangeCells} cells"); } catch { }
+                        try { sb.AppendLine($"      Cooldown: {ability.Cooldown} (onCooldown={ability.IsOnCooldown}, untilEndOfCombat={ability.IsOnCooldownUntilEndOfCombat})"); } catch { }
+                        try { sb.AppendLine($"      Psyker: {bp.IsPsykerAbility}, HeroicAct: {bp.IsHeroicAct}, Weapon: {bp.IsWeaponAbility}"); } catch { }
+                        try { sb.AppendLine($"      ModTiming: {AbilityDatabase.GetTiming(ability)}, GapCloser: {AbilityDatabase.IsGapCloser(ability)}"); } catch { }
+                        try
+                        {
+                            string desc = bp.Description;
+                            if (!string.IsNullOrEmpty(desc))
+                            {
+                                desc = System.Text.RegularExpressions.Regex.Replace(desc, "<[^>]+>", "").Replace("\n", " ").Replace("\r", " ");
+                                if (desc.Length > 600) desc = desc.Substring(0, 600) + "...";
+                                sb.AppendLine($"      Description: {desc}");
+                            }
+                        }
+                        catch { }
                         sb.AppendLine();
                     }
+
+                    // Active buffs (name | GUID) — used to recognise combo states such as self-applied burning
+                    try
+                    {
+                        var buffs = unit.Buffs?.Enumerable?.Where(b => b?.Blueprint != null).ToList();
+                        sb.AppendLine($"  ACTIVE BUFFS ({buffs?.Count ?? 0}):");
+                        if (buffs != null)
+                            foreach (var b in buffs.OrderBy(b => b.Blueprint.name))
+                                sb.AppendLine($"    - {b.Blueprint.name} | {b.Blueprint.AssetGuid} | rank={b.Rank}");
+                    }
+                    catch (Exception ex) { sb.AppendLine($"  ACTIVE BUFFS: error {ex.Message}"); }
+                    sb.AppendLine();
                 }
 
                 string allDumpPath = Path.Combine(Main.ModPath, "AllAbilities_Dump.txt");
