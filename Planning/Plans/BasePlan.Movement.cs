@@ -720,6 +720,9 @@ namespace CompanionAI_v3.Planning.Plans
         /// MAX_POSITIONAL_BUFFS 만큼 반복하며 PlanPositionalBuff 호출
         /// </summary>
         /// <returns>계획된 위치 버프 수</returns>
+        /// <summary>Zone placements/moves added by the last positional buff phase (Combat Locus waits for them).</summary>
+        protected int _plannedZoneMovesThisPlan;
+
         protected int ExecutePositionalBuffPhase(
             List<PlannedAction> actions,
             Situation situation,
@@ -730,8 +733,13 @@ namespace CompanionAI_v3.Planning.Plans
             if (usedBuffGuids == null)
                 usedBuffGuids = _plannedBuffGuids;
 
-            int positionalBuffCount = 0;
-            while (positionalBuffCount < MAX_POSITIONAL_BUFFS && remainingAP >= 1f)
+            // Strategist zones (Frontline/Backline/Rear) are placed together and cost no AP.
+            var zoneActions = Planners.StrategistZonePlanner.PlanZones(situation, usedBuffGuids, RoleName);
+            actions.AddRange(zoneActions);
+            _plannedZoneMovesThisPlan = zoneActions.Count;
+
+            int positionalBuffCount = zoneActions.Count;
+            while (positionalBuffCount < MAX_POSITIONAL_BUFFS + zoneActions.Count && remainingAP >= 1f)
             {
                 var positionalBuffAction = PlanPositionalBuff(situation, ref remainingAP, usedBuffGuids);
                 if (positionalBuffAction == null) break;

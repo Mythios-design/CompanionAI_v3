@@ -84,7 +84,8 @@ namespace CompanionAI_v3.Planning.Plans
             => BuffPlanner.PlanPositionalBuff(situation, ref remainingAP, usedBuffGuids ?? _plannedBuffGuids, RoleName);
 
         protected PlannedAction PlanStratagem(Situation situation, ref float remainingAP)
-            => BuffPlanner.PlanStratagem(situation, ref remainingAP, RoleName);
+            // Stratagems target zones already on the map; wait until this plan's zone moves have happened.
+            => _plannedZoneMovesThisPlan > 0 ? null : BuffPlanner.PlanStratagem(situation, ref remainingAP, RoleName);
 
         // ★ v3.5.80: attackPlanned 파라미터 추가
         protected PlannedAction PlanPostAction(Situation situation, ref float remainingAP, bool attackPlanned = false)

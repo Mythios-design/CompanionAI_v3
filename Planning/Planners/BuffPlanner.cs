@@ -1326,8 +1326,25 @@ namespace CompanionAI_v3.Planning.Planners
                         ?? zones.OrderByDescending(z => z.EnemyCount).FirstOrDefault();
 
                 case "CombatLocus":
-                    // 아군이 가장 많은 존 (보너스 2배)
-                    return zones.OrderByDescending(z => z.AllyCount).FirstOrDefault();
+                {
+                    // Doubles one zone but switches the others off this round: only worth it when the doubled
+                    // zone gains more than the others lose.
+                    var values = StrategistZonePlanner.GetExistingZoneValues(situation);
+                    float total = values.Sum(v => v.value);
+                    ZoneInfo pick = null;
+                    float bestGain = 0f;
+                    foreach (var z in zones)
+                    {
+                        var match = values.FirstOrDefault(v => v.kind.ToString() == z.ZoneType);
+                        if (match.value <= 0f) continue;
+                        float gain = match.value - (total - match.value);
+                        if (gain > bestGain) { bestGain = gain; pick = z; }
+                    }
+                    Log.Planning.Info(pick != null
+                        ? $"[BuffPlanner] Combat Locus on {pick.ZoneType} (gain {bestGain:F1}; zones: {string.Join(", ", values.Select(v => $"{v.kind}={v.value:F1}"))})"
+                        : $"[BuffPlanner] Combat Locus held — doubling one zone isn't worth switching off the others ({string.Join(", ", values.Select(v => $"{v.kind}={v.value:F1}"))})");
+                    return pick;
+                }
 
                 case "Blitz":
                     // Frontline 우선 (이동 보너스로 진입 지원)
