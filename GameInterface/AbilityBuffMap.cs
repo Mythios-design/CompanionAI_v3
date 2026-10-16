@@ -84,6 +84,27 @@ namespace CompanionAI_v3.GameInterface
             return selfOnly ? result.CasterBuffs : result.TargetBuffs;
         }
 
+        /// <summary>
+        /// True when the unit has this buff and casting again would add nothing. Buffs that stack (or have
+        /// ranks left to gain, like Word of the Emperor) don't count as "already has it".
+        /// </summary>
+        public static bool HasNonStackingBuff(Kingmaker.EntitySystem.Entities.BaseUnitEntity unit, BlueprintBuff blueprint)
+        {
+            if (unit == null || blueprint == null) return false;
+            var buff = unit.Buffs.GetBuff(blueprint);
+            if (buff == null) return false;
+            switch (blueprint.Stacking)
+            {
+                case StackingType.Stack:
+                case StackingType.Summ:
+                    return false;
+                case StackingType.Rank:
+                    return blueprint.Ranks <= 1 || buff.Rank >= blueprint.Ranks;
+                default:
+                    return true;
+            }
+        }
+
         public static void Clear()
         {
             lock (_lock) { _cache.Clear(); }

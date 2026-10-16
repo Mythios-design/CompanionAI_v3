@@ -21,6 +21,7 @@ namespace CompanionAI_v3.Planning.Planners
     {
         // The game's own marker group: abilities in it put weapon attacks on cooldown for the round.
         private const string WeaponAttackGroupName = "WeaponAttackAbilityGroup";
+        private const string BREAK_THROUGH = "54f73c2523524544a8d7ffc3807056f0";
 
         public static void Apply(Situation situation)
         {
@@ -30,6 +31,14 @@ namespace CompanionAI_v3.Planning.Planners
                 int removedDesperate = RemoveWhere(situation, a => a.Blueprint?.IsDesperateMeasure == true);
                 if (removedDesperate > 0)
                     Log.Planning.Info($"[AbilityPolicy] {situation.Unit.CharacterName}: Desperate Measures held back (AI never uses them)");
+
+                // Break Through (and its Slash attacks) can't be used in the same round as Charge. With an enemy
+                // already in reach, Break Through is the better play, so don't Charge first.
+                bool hasBreakThrough = situation.AvailableBuffs.Concat(situation.AvailableAttacks)
+                    .Any(a => a?.Blueprint?.AssetGuid?.ToString() == BREAK_THROUGH);
+                if (hasBreakThrough && situation.MeleeHittableEnemies != null && situation.MeleeHittableEnemies.Count > 0
+                    && RemoveWhere(situation, a => a.IsCharge) > 0)
+                    Log.Planning.Info($"[AbilityPolicy] {situation.Unit.CharacterName}: Charge held — enemy in reach, Break Through would be locked out");
 
                 if (situation.RangePreference == RangePreference.PreferMelee && CanStillMakeWeaponAttack(situation, out string why))
                 {

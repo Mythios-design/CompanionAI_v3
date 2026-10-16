@@ -331,7 +331,8 @@ namespace CompanionAI_v3.Core
             {
                 for (int i = 0; i < mappings.Count; i++)
                 {
-                    if (state.ActiveBuffGuids.Contains(mappings[i].BuffBlueprintGuid))
+                    if (state.ActiveBuffGuids.Contains(mappings[i].BuffBlueprintGuid)
+                        && AbilityBuffMap.HasNonStackingBuff(unit, mappings[i].Blueprint))
                         return true;
                 }
                 return false;
@@ -342,7 +343,7 @@ namespace CompanionAI_v3.Core
             {
                 for (int i = 0; i < mappings.Count; i++)
                 {
-                    if (mappings[i].Blueprint != null && unit.Buffs.GetBuff(mappings[i].Blueprint) != null)
+                    if (AbilityBuffMap.HasNonStackingBuff(unit, mappings[i].Blueprint))
                         return true;
                 }
             }

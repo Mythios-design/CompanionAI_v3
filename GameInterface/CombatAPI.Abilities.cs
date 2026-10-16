@@ -744,7 +744,7 @@ namespace CompanionAI_v3.GameInterface
                 {
                     foreach (var buffBlueprint in buffs)
                     {
-                        if (unit.Buffs.GetBuff(buffBlueprint) != null)
+                        if (AbilityBuffMap.HasNonStackingBuff(unit, buffBlueprint))
                             return true;
                     }
                 }
