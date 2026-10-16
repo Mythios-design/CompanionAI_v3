@@ -947,7 +947,7 @@ namespace CompanionAI_v3.Core
         {
             if (turnState.EndOfTurnRepositionDone || turnState.MovementBlockedThisTurn) return false;
             if (currentMP <= 0f) return false;
-            var preference = CombatAPI.GetRangePreference(unit);
+            var preference = CombatAPI.GetEffectiveRangePreference(unit);
             if (preference != Settings.RangePreference.PreferRanged && preference != Settings.RangePreference.PreferMelee) return false;
 
             turnState.EndOfTurnRepositionDone = true;
@@ -962,7 +962,7 @@ namespace CompanionAI_v3.Core
         {
             turnState.EndOfTurnRepositionPending = false;
 
-            var move = situation.RangePreference == Settings.RangePreference.PreferMelee
+            var move = situation.EffectiveRangePreference == Settings.RangePreference.PreferMelee
                 ? CompanionAI_v3.Planning.Planners.MovementPlanner.PlanEndOfTurnAdvance(situation)
                 : CompanionAI_v3.Planning.Planners.MovementPlanner.PlanEndOfTurnReposition(situation);
             if (move == null)
@@ -1567,6 +1567,16 @@ namespace CompanionAI_v3.Core
                 return true;
             }
 
+            // Bonus turns (Move, Move, Move! etc.) start in the same round and fire no turn-start event,
+            // so a change between normal and bonus turn marks a new turn.
+            bool extraNow = CombatAPI.IsExtraTurn(unit);
+            if (extraNow != state.StartedAsExtraTurn)
+            {
+                Log.Engine.Info($"[Orchestrator] {unit.CharacterName}: {(extraNow ? "bonus turn started" : "bonus turn over")} - fresh turn state");
+                if (extraNow) OnBonusTurnStart(unit);
+                return true;
+            }
+
             // ★ v3.0.76: AP 기반 감지 완전 제거
             // CombatRound가 같으면 같은 턴 (버프로 인한 AP 증가와 무관)
             // Note: LastTurn은 GameRound 기반이라 CombatRound와 비교 불가
@@ -1631,6 +1641,23 @@ namespace CompanionAI_v3.Core
             // ★ v3.5.00: 킬 스냅샷 초기화
             _executor.ClearSnapshots();
 
+            ResetPerTurnCaches();
+
+            Log.Engine.Info($"[Orchestrator] Turn started for {unit.CharacterName} (via event)");
+        }
+
+        /// <summary>
+        /// Bonus turns fire no turn-start event. Called from IsNewTurn when one begins, so it gets
+        /// the same fresh caches and AI timeout as a normal turn.
+        /// </summary>
+        private void OnBonusTurnStart(BaseUnitEntity unit)
+        {
+            _executor.ClearSnapshots();
+            ResetPerTurnCaches();
+        }
+
+        private void ResetPerTurnCaches()
+        {
             // ★ v3.5.29: 전투 캐시 초기화 (거리/타겟팅)
             CombatCache.ClearAll();
             CompanionAI_v3.GameInterface.MovementAPI.ClearEvaluationCache();
@@ -1672,8 +1699,6 @@ namespace CompanionAI_v3.Core
                 }
             }
             catch (Exception ex) { Log.Engine.Error(ex, $"[Orchestrator] AI timeout extend failed"); }
-
-            Log.Engine.Info($"[Orchestrator] Turn started for {unit.CharacterName} (via event)");
         }
 
         /// <summary>

@@ -64,7 +64,7 @@ namespace CompanionAI_v3.GameInterface
 
         /// <summary>Ranged characters avoid tiles melee enemies can reach, unless they're marked Durable.</summary>
         public static bool AvoidsMeleeReach(BaseUnitEntity unit)
-            => GetRangePreference(unit) == Settings.RangePreference.PreferRanged && !IsDurable(unit);
+            => GetEffectiveRangePreference(unit) == Settings.RangePreference.PreferRanged && !IsDurable(unit);
 
         public static bool NeedsReloadAnyRanged(BaseUnitEntity unit)
         {

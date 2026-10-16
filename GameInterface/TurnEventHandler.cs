@@ -187,6 +187,7 @@ namespace CompanionAI_v3.GameInterface
             else
             {
                 Log.Engine.Info("[TurnEventHandler] Combat started");
+                CustomBehaviourTreePatch.ClearTurnStartTimes();
                 Core.HeroicActPolicy.Instance.ResetForCombat();
                 Planning.Planners.PyroMeleeCombo.Reset();
                 Planning.Planners.TauntTracker.Reset();

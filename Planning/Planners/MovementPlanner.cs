@@ -1492,7 +1492,7 @@ namespace CompanionAI_v3.Planning.Planners
         /// </summary>
         public static bool ShouldRetreat(Situation situation)
         {
-            var rangePreference = situation.RangePreference;
+            var rangePreference = situation.EffectiveRangePreference;
             if (rangePreference != Settings.RangePreference.PreferRanged)
                 return false;
 
@@ -1602,7 +1602,7 @@ namespace CompanionAI_v3.Planning.Planners
         public static PlannedAction PlanEndOfTurnReposition(Situation situation)
         {
             if (situation?.Unit == null) return null;
-            if (situation.RangePreference != Settings.RangePreference.PreferRanged) return null;
+            if (situation.EffectiveRangePreference != Settings.RangePreference.PreferRanged) return null;
             if (!situation.CanMove || situation.CurrentMP <= 0f) return null;
             if (!situation.HasLivingEnemies || situation.Enemies == null || situation.Enemies.Count == 0) return null;
 
@@ -1700,7 +1700,7 @@ namespace CompanionAI_v3.Planning.Planners
         public static PlannedAction PlanEndOfTurnAdvance(Situation situation)
         {
             if (situation?.Unit == null) return null;
-            if (situation.RangePreference != Settings.RangePreference.PreferMelee) return null;
+            if (situation.EffectiveRangePreference != Settings.RangePreference.PreferMelee) return null;
             if (!situation.CanMove || situation.CurrentMP <= 0f) return null;
             if (!situation.HasLivingEnemies || situation.Enemies == null) return null;
 

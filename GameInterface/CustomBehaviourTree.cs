@@ -75,6 +75,9 @@ namespace CompanionAI_v3.GameInterface
         /// </summary>
         private const float SecondsToWaitAtStart = 0.5f;
 
+        /// <summary>Frames spent waiting in IsActingEnabled, per unit (so a stall shows in the log)</summary>
+        private static readonly Dictionary<string, int> _actingWaitCounts = new Dictionary<string, int>();
+
         /// <summary>
         /// ★ v3.10.0: CompanionAIDecisionNode 도달 여부 추적 (턴 스킵 진단용)
         /// </summary>
@@ -357,6 +360,17 @@ namespace CompanionAI_v3.GameInterface
         {
             _turnStartTimes.Remove(unitId);
             _canActWaitCounts.Remove(unitId);
+            _actingWaitCounts.Remove(unitId);
+        }
+
+        /// <summary>
+        /// Drop all recorded turn start times. A load can interrupt a turn before its end event,
+        /// leaving a time from the old clock behind.
+        /// </summary>
+        public static void ClearTurnStartTimes()
+        {
+            _turnStartTimes.Clear();
+            _actingWaitCounts.Clear();
         }
 
         /// <summary>
@@ -424,6 +438,7 @@ namespace CompanionAI_v3.GameInterface
             _lastKnownTree.Clear();
             _decisionNodeReached.Clear();
             _canActWaitCounts.Clear();
+            ClearTurnStartTimes();
         }
 
         /// <summary>
@@ -446,8 +461,30 @@ namespace CompanionAI_v3.GameInterface
 
             var currentTime = Game.Instance.TimeController.RealTime;
             var waitTime = TimeSpan.FromSeconds(SecondsToWaitAtStart);
+            string uid = unit.UniqueId;
 
-            return currentTime >= turnStartTime + waitTime;
+            // A start time ahead of the clock is stale (the clock went back on load): act now.
+            if (turnStartTime > currentTime)
+            {
+                Log.Engine.Warn($"[CustomBehaviourTree] {unit.CharacterName}: turn start time {turnStartTime} is ahead of clock {currentTime} - stale, ignoring");
+                _turnStartTimes.Remove(uid);
+                _actingWaitCounts.Remove(uid);
+                return true;
+            }
+
+            if (currentTime >= turnStartTime + waitTime)
+            {
+                _actingWaitCounts.Remove(uid);
+                return true;
+            }
+
+            _actingWaitCounts.TryGetValue(uid, out int waitCount);
+            waitCount++;
+            _actingWaitCounts[uid] = waitCount;
+            if (waitCount == 1 || waitCount % 60 == 0)
+                Log.Engine.Info($"[CompanionAIDecisionNode] {unit.CharacterName}: Waiting for turn start delay (frame {waitCount}, start={turnStartTime}, now={currentTime})");
+
+            return false;
         }
 
         #endregion

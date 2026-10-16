@@ -55,6 +55,9 @@ namespace CompanionAI_v3.Core
         /// <summary>이 턴이 시작된 전투 라운드</summary>
         public int CombatRound { get; }
 
+        /// <summary>True when this state was created for a bonus turn (e.g. Move, Move, Move!).</summary>
+        public bool StartedAsExtraTurn { get; }
+
         #endregion
 
         #region Plan
@@ -250,6 +253,7 @@ namespace CompanionAI_v3.Core
 
             // ★ 게임의 현재 전투 라운드 저장
             CombatRound = Kingmaker.Game.Instance?.TurnController?.CombatRound ?? 0;
+            StartedAsExtraTurn = GameInterface.CombatAPI.IsExtraTurn(unit);
 
             StartingAP = currentAP;
             StartingMP = currentMP;

@@ -373,6 +373,20 @@ namespace CompanionAI_v3.GameInterface
             }
         }
 
+        /// <summary>
+        /// Range preference used for positioning (end-of-turn moves, melee-reach avoidance, weapon-first, closing in).
+        /// Adaptive resolves from the equipped weapon set: any melee weapon → PreferMelee, ranged only → PreferRanged.
+        /// Attack filtering keeps using GetRangePreference, so Adaptive characters can still use every attack.
+        /// </summary>
+        public static RangePreference GetEffectiveRangePreference(BaseUnitEntity unit)
+        {
+            var preference = GetRangePreference(unit);
+            if (preference != RangePreference.Adaptive) return preference;
+            if (HasMeleeWeapon(unit)) return RangePreference.PreferMelee;
+            if (HasRangedWeapon(unit)) return RangePreference.PreferRanged;
+            return RangePreference.Adaptive;
+        }
+
         public static float GetAbilityAPCost(AbilityData ability)
         {
             if (ability == null) return 1f;

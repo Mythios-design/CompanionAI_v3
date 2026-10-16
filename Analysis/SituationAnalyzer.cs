@@ -173,6 +173,7 @@ namespace CompanionAI_v3.Analysis
 
             situation.CharacterSettings = charSettings;
             situation.RangePreference = charSettings?.RangePreference ?? RangePreference.Adaptive;
+            situation.EffectiveRangePreference = CombatAPI.GetEffectiveRangePreference(unit);
             // ★ v3.110.11: MinSafeDistance는 WeaponRangeProfile에서 자동 계산됨 (AnalyzeWeapons 참조).
             // 초기값 0 유지, AnalyzeWeapons 이후 덮어써짐.
         }

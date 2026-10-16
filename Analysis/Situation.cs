@@ -57,6 +57,9 @@ namespace CompanionAI_v3.Analysis
         /// <summary>거리 선호도</summary>
         public RangePreference RangePreference { get; set; }
 
+        /// <summary>Positioning preference: Adaptive resolved from the equipped weapon (see CombatAPI.GetEffectiveRangePreference)</summary>
+        public RangePreference EffectiveRangePreference { get; set; }
+
         /// <summary>안전 거리</summary>
         public float MinSafeDistance { get; set; }
 
@@ -448,6 +451,7 @@ namespace CompanionAI_v3.Analysis
             // Settings
             CharacterSettings = null;
             RangePreference = RangePreference.Adaptive;
+            EffectiveRangePreference = RangePreference.Adaptive;
             MinSafeDistance = 0f;
 
             // Weapon & Ammo

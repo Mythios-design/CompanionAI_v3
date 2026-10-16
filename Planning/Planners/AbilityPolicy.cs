@@ -40,7 +40,7 @@ namespace CompanionAI_v3.Planning.Planners
                     && RemoveWhere(situation, a => a.IsCharge) > 0)
                     Log.Planning.Info($"[AbilityPolicy] {situation.Unit.CharacterName}: Charge held — enemy in reach, Break Through would be locked out");
 
-                if (situation.RangePreference == RangePreference.PreferMelee && CanStillMakeWeaponAttack(situation, out string why))
+                if (situation.EffectiveRangePreference == RangePreference.PreferMelee && CanStillMakeWeaponAttack(situation, out string why))
                 {
                     var held = new List<string>();
                     RemoveWhere(situation, a =>
