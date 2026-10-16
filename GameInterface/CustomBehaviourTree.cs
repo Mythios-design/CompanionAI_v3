@@ -299,7 +299,12 @@ namespace CompanionAI_v3.GameInterface
                                     new Condition(
                                         b => b.DecisionContext?.Ability != null,
                                         "Ability != null",
-                                        new TaskNodeCastAbility()
+                                        // The game's cast node fails when it refuses the command; catch that so
+                                        // the turn replans instead of falling through to finishing the turn.
+                                        new Selector(
+                                            new TaskNodeCastAbility(),
+                                            new CastRefusedNode()
+                                        )
                                     ),
                                     // Path 2: 이동 실행
                                     // ★ v3.5.33: CombatAPI.CanMove() 체크 추가 - 이동 불가 시 이동 브랜치 스킵
@@ -498,6 +503,38 @@ namespace CompanionAI_v3.GameInterface
     /// 2. 결과에 따라 context.Ability 또는 context.FoundBetterPlace 설정
     /// 3. Status.Success 반환 → 다음 노드에서 실행
     /// </summary>
+    /// <summary>
+    /// Runs after the game's TaskNodeCastAbility fails ("Command run failed" or no ability/target). Hands the
+    /// refusal to the orchestrator: Success keeps the main loop going (replan next tick), Failure lets the
+    /// tree finish the turn.
+    /// </summary>
+    public class CastRefusedNode : TaskNode
+    {
+        public CastRefusedNode() : base("CastRefusedNode")
+        {
+        }
+
+        protected override Status TickInternal(Blackboard blackboard)
+        {
+            var context = blackboard.DecisionContext;
+            var unit = context?.Unit;
+            if (unit == null) return Status.Failure;
+
+            var ability = context.Ability;
+            context.Ability = null;
+            context.AbilityTarget = null;
+            try
+            {
+                return TurnOrchestrator.Instance.NotifyCastRefused(unit, ability) ? Status.Success : Status.Failure;
+            }
+            catch (Exception ex)
+            {
+                Log.Engine.Error(ex, $"[CastRefusedNode] {unit.CharacterName}: refused-cast handling failed");
+                return Status.Failure;
+            }
+        }
+    }
+
     public class CompanionAIDecisionNode : TaskNode
     {
         public CompanionAIDecisionNode() : base("CompanionAIDecisionNode")

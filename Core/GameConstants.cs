@@ -38,6 +38,11 @@ namespace CompanionAI_v3.Core
         /// </summary>
         public const int MAX_MOVE_SETUP_FAILURES = 3;
 
+        /// <summary>
+        /// Casts the game may refuse in one turn before the turn ends. Each refusal before that replans.
+        /// </summary>
+        public const int MAX_CAST_REFUSALS = 2;
+
         #endregion
 
         #region Thresholds

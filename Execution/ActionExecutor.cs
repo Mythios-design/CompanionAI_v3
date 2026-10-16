@@ -234,6 +234,19 @@ namespace CompanionAI_v3.Execution
                 return ExecutionResult.Failure($"Ability unavailable: {reasons}");
             }
 
+            // The game's unavailability reasons don't cover AP, and the game refuses a cast it can't pay for.
+            var apCaster = situation?.Unit ?? ability.Caster as BaseUnitEntity;
+            if (apCaster != null)
+            {
+                float apCost = CombatAPI.GetEffectiveAPCost(ability);
+                float apNow = CombatAPI.GetCurrentAP(apCaster);
+                if (apCost > apNow + 0.01f)
+                {
+                    Log.Engine.Warn($"[Executor] Not enough AP: {ability.Name} costs {apCost:F1}, AP={apNow:F1}");
+                    return ExecutionResult.Failure($"Ability unavailable: not enough AP ({ability.Name} costs {apCost:F1}, AP={apNow:F1})");
+                }
+            }
+
             // ★ v3.7.82: 실행 시점 도달 가능 검증 (플랜 연속 실행 대응)
             // 계획 생성 후 이동이 실행되면 캐스터 위치가 변함
             // 현재 위치에서 타겟에게 사거리+LOS 재검증 필수

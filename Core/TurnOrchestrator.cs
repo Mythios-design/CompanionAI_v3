@@ -6,6 +6,7 @@ using Kingmaker;
 using Kingmaker.EntitySystem.Entities;
 using Kingmaker.AI;  // ★ v3.9.02: AiBrainController.SecondsAiTimeout
 using Kingmaker.UnitLogic;        // ★ v3.21.6: GetMechanicFeature 확장 메서드
+using Kingmaker.UnitLogic.Abilities;
 using Kingmaker.UnitLogic.Enums;  // ★ v3.21.6: MechanicsFeatureType.ForceAIControl
 using CompanionAI_v3.Analysis;
 using CompanionAI_v3.Planning;
@@ -958,6 +959,42 @@ namespace CompanionAI_v3.Core
             return true;
         }
 
+        /// <summary>
+        /// Before ending a turn with AP left, top up a gun whose magazine isn't full. Checked once per turn.
+        /// Returns the reload cast, or null when there's nothing to do.
+        /// </summary>
+        private ExecutionResult TryEndOfTurnReload(BaseUnitEntity unit, string unitName, TurnState turnState, Situation situation)
+        {
+            if (turnState.EndOfTurnReloadChecked) return null;
+            turnState.EndOfTurnReloadChecked = true;
+            if (turnState.HasReloadedThisTurn) return null;
+
+            var reload = situation?.ReloadAbility;
+            if (reload == null) return null;
+
+            var weapon = reload.Weapon ?? unit.Body?.PrimaryHand?.MaybeWeapon;
+            if (weapon == null || weapon.Blueprint == null || weapon.Blueprint.IsMelee) return null;
+            int maxAmmo = weapon.Blueprint.WarhammerMaxAmmo;
+            int ammo = weapon.CurrentAmmo;
+            if (maxAmmo <= 0 || ammo >= maxAmmo) return null;
+
+            float ap = CombatAPI.GetCurrentAP(unit);
+            float cost = CombatAPI.GetAbilityAPCost(reload);
+            if (ap <= 0f || cost > ap) return null;
+            if (!CombatAPI.IsAbilityAvailable(reload, out _)) return null;
+
+            Log.Engine.Info($"[Orchestrator] {unitName}: End of turn with AP={ap:F1} - topping up {weapon.Name} ({ammo}/{maxAmmo})");
+            var action = PlannedAction.Reload(reload, unit, cost);
+            var result = _executor.Execute(action, situation);
+            if (result.Type != ResultType.CastAbility)
+            {
+                Log.Engine.Info($"[Orchestrator] {unitName}: End-of-turn reload skipped ({result.Reason})");
+                return null;
+            }
+            turnState.RecordAction(action, true);
+            return result;
+        }
+
         private ExecutionResult PlanAndExecuteEndOfTurnReposition(BaseUnitEntity unit, string unitId, string unitName, TurnState turnState, Situation situation)
         {
             turnState.EndOfTurnRepositionPending = false;
@@ -1173,6 +1210,9 @@ namespace CompanionAI_v3.Core
                     return ExecutionResult.Continue();
                 }
 
+                var topUp = TryEndOfTurnReload(unit, unitName, turnState, situation);
+                if (topUp != null) return topUp;
+
                 if (TryBeginEndOfTurnReposition(unit, unitName, turnState, CombatAPI.GetCurrentMP(unit)))
                     return ExecutionResult.Continue();
 
@@ -1196,10 +1236,15 @@ namespace CompanionAI_v3.Core
             // ★ v3.8.48: 실행 시간 측정
             _profilerStopwatch.Restart();
 
-            // A planned EndTurn with movement left: give the end-of-turn move (cover / close in) its chance first.
-            if (nextAction.Type == ActionType.EndTurn
-                && TryBeginEndOfTurnReposition(unit, unitName, turnState, CombatAPI.GetCurrentMP(unit)))
-                return ExecutionResult.Continue();
+            // A planned EndTurn: top up the magazine with spare AP, then give the end-of-turn move
+            // (cover / close in) its chance.
+            if (nextAction.Type == ActionType.EndTurn)
+            {
+                var topUp = TryEndOfTurnReload(unit, unitName, turnState, situation);
+                if (topUp != null) return topUp;
+                if (TryBeginEndOfTurnReposition(unit, unitName, turnState, CombatAPI.GetCurrentMP(unit)))
+                    return ExecutionResult.Continue();
+            }
 
             // 행동 실행
             Log.Engine.Info($"[Orchestrator] {unitName}: Executing {nextAction}");
@@ -1428,6 +1473,78 @@ namespace CompanionAI_v3.Core
             Log.Engine.Warn($"[Orchestrator] {unit.CharacterName}: Move setup failed — cancelling plan for replan " +
                 $"(setup failures={turnState.MoveSetupFailCount}/{GameConstants.MOVE_SETUP_FAILURES_BLOCK_MOVEMENT} before movement block)");
             return true;
+        }
+
+        /// <summary>
+        /// The game refused a cast the mod sent (its cast node reports "Command run failed"). Without this the
+        /// behaviour tree falls through to finishing the turn with AP unspent. Undo the cast's record, cancel the
+        /// plan and replan. Returns false when the turn should end instead (no state, or too many refusals).
+        /// </summary>
+        public bool NotifyCastRefused(BaseUnitEntity unit, AbilityData ability)
+        {
+            if (unit == null) return false;
+            if (!_turnStates.TryGetValue(unit.UniqueId, out var turnState) || turnState == null) return false;
+
+            float ap = CombatAPI.GetCurrentAP(unit);
+            float cost = ability != null ? CombatAPI.GetEffectiveAPCost(ability) : 0f;
+            Log.Engine.Warn($"[Orchestrator] {unit.CharacterName}: game refused {ability?.Name ?? "cast"} (cost={cost:F1}, AP={ap:F1}, MP={CombatAPI.GetCurrentMP(unit):F1})");
+
+            RollbackLastCastRecord(turnState, ability);
+            if (ability != null) AbilityUsageTracker.MarkFailed(unit.UniqueId, ability);
+
+            turnState.CastRefusedCount++;
+            turnState.Plan?.Cancel("Cast refused by game");
+            turnState.CurrentComputePhase = ComputePhase.Ready;
+
+            if (turnState.CastRefusedCount >= GameConstants.MAX_CAST_REFUSALS)
+            {
+                Log.Engine.Warn($"[Orchestrator] {unit.CharacterName}: {turnState.CastRefusedCount} casts refused this turn - ending turn");
+                return false;
+            }
+            if (ap <= 0f && CombatAPI.GetCurrentMP(unit) <= 0f)
+            {
+                Log.Engine.Info($"[Orchestrator] {unit.CharacterName}: no AP or MP left after refused cast - ending turn");
+                return false;
+            }
+
+            Log.Engine.Info($"[Orchestrator] {unit.CharacterName}: replanning after refused cast ({turnState.CastRefusedCount}/{GameConstants.MAX_CAST_REFUSALS})");
+            return true;
+        }
+
+        /// <summary>The refused cast was recorded as a success when it was sent; mark it failed and reset its turn flags.</summary>
+        private static void RollbackLastCastRecord(TurnState turnState, AbilityData ability)
+        {
+            if (ability == null) return;
+            PlannedAction refused = null;
+            for (int i = turnState.ExecutedActions.Count - 1; i >= 0; i--)
+            {
+                var a = turnState.ExecutedActions[i];
+                if (a.WasSuccessful != true || a.Ability == null) continue;
+                if (!ReferenceEquals(a.Ability, ability) && a.Ability.Blueprint != ability.Blueprint) continue;
+                refused = a;
+                break;
+            }
+            if (refused == null) return;
+
+            refused.WasSuccessful = false;
+            bool OtherSucceeded(ActionType type) => turnState.ExecutedActions.Any(a =>
+                !ReferenceEquals(a, refused) && a.Type == type && a.WasSuccessful == true);
+
+            switch (refused.Type)
+            {
+                case ActionType.Attack:
+                    if (!OtherSucceeded(ActionType.Attack)) turnState.HasAttackedThisTurn = false;
+                    break;
+                case ActionType.Reload:
+                    if (!OtherSucceeded(ActionType.Reload)) turnState.HasReloadedThisTurn = false;
+                    break;
+                case ActionType.Buff:
+                    if (!OtherSucceeded(ActionType.Buff)) turnState.HasBuffedThisTurn = false;
+                    break;
+                case ActionType.Heal:
+                    if (!OtherSucceeded(ActionType.Heal)) turnState.HasHealedThisTurn = false;
+                    break;
+            }
         }
 
         /// <summary>

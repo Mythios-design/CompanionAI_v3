@@ -172,6 +172,12 @@ namespace CompanionAI_v3.Core
         /// </summary>
         public int MoveSetupFailCount { get; set; }
 
+        /// <summary>Casts the game refused this turn after the mod sent them (see TurnOrchestrator.NotifyCastRefused).</summary>
+        public int CastRefusedCount { get; set; }
+
+        /// <summary>True once the end-of-turn top-up reload has been considered this turn.</summary>
+        public bool EndOfTurnReloadChecked { get; set; }
+
         /// <summary>
         /// 이동 설정 실패가 반복되어 이번 턴 나머지 동안 이동 계획을 차단 (Analyzer 가 CanMove=false 로 미러,
         /// Orchestrator 는 남은 Move 액션을 스킵). 같은 목적지를 재선택하는 replan 루프를 끊고
