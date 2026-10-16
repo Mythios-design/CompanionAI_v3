@@ -163,6 +163,20 @@ namespace CompanionAI_v3.Planning
             result.AllOptions[2] = EvaluateAttackThenRetreat(situation, currentHittable, needsRetreat);
             result.AllOptions[3] = EvaluateMoveOnly(situation);
 
+            // Engaged (an enemy can make opportunity attacks) and able to hit from here: attack before moving.
+            // Walking out of melee reach first provokes those attacks; moving after the attack is still allowed.
+            if (result.AllOptions[0].IsViable && CombatAPI.IsInThreateningArea(situation.Unit))
+            {
+                int engagedBy = CombatAPI.GetThreateningEnemies(situation.Unit).Count;
+                foreach (int i in new[] { 1, 3 })
+                {
+                    if (!result.AllOptions[i].IsViable) continue;
+                    result.AllOptions[i].IsViable = false;
+                    result.AllOptions[i].Reason = $"engaged by {engagedBy} - attack before moving";
+                }
+                Log.Planning.Info($"[{roleName}] TacticalEval: engaged by {engagedBy} enemies, attacking before moving (no opportunity attacks)");
+            }
+
             // 최고 점수 viable 옵션 선택
             float bestScore = float.MinValue;
             int bestIdx = 3; // 기본 MoveOnly
