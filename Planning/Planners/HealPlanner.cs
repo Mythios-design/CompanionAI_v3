@@ -127,11 +127,13 @@ namespace CompanionAI_v3.Planning.Planners
         {
             var reload = situation.ReloadAbility;
             if (reload == null) return null;
-            if (!situation.NeedsReload) return null;
             if (situation.HasReloadedThisTurn) return null;
 
             float cost = CombatAPI.GetAbilityAPCost(reload);
             if (cost > remainingAP) return null;
+
+            bool topUpForBurst = !situation.NeedsReload && ShouldTopUpForBurst(situation, cost, remainingAP, roleName);
+            if (!situation.NeedsReload && !topUpForBurst) return null;
 
             var target = new TargetWrapper(situation.Unit);
             string reason;
@@ -142,6 +144,44 @@ namespace CompanionAI_v3.Planning.Planners
             }
 
             return null;
+        }
+
+        /// <summary>
+        /// A burst attack with too little ammo fires fewer shots. Reload first when the magazine can't cover the
+        /// best burst attack and there's still AP to reload and then fire that burst.
+        /// </summary>
+        private static bool ShouldTopUpForBurst(Situation situation, float reloadCost, float remainingAP, string roleName)
+        {
+            try
+            {
+                var unit = situation.Unit;
+                var weapon = unit?.Body?.PrimaryHand?.MaybeWeapon;
+                if (weapon == null || weapon.Blueprint.IsMelee) return false;
+                int maxAmmo = weapon.Blueprint?.WarhammerMaxAmmo ?? -1;
+                int ammo = weapon.CurrentAmmo;
+                if (maxAmmo <= 0 || ammo >= maxAmmo) return false;
+
+                AbilityData bestBurst = null;
+                int shots = 0;
+                foreach (var attack in situation.AvailableAttacks)
+                {
+                    if (attack == null || !attack.IsBurstAttack || attack.Weapon != weapon) continue;
+                    int count = attack.BurstAttacksCount;
+                    if (count > shots) { shots = count; bestBurst = attack; }
+                }
+                if (bestBurst == null || ammo >= shots) return false;
+
+                float burstCost = CombatAPI.GetAbilityAPCost(bestBurst);
+                if (reloadCost + burstCost > remainingAP) return false;
+
+                Log.Planning.Info($"[{roleName}] Reload first: {bestBurst.Name} needs {shots} rounds, magazine has {ammo}/{maxAmmo}");
+                return true;
+            }
+            catch (Exception ex)
+            {
+                Log.Planning.Error(ex, "[HealPlanner] ShouldTopUpForBurst failed");
+                return false;
+            }
         }
 
         /// <summary>
