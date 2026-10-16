@@ -1620,39 +1620,66 @@ namespace CompanionAI_v3.Planning.Planners
                 maxFamiliarDist = FamiliarAPI.GetMaxFamiliarAbilityRange(unit);
             }
 
-            AIRole role = situation.CharacterSettings?.Role ?? AIRole.Auto;
-            var best = MovementAPI.FindRetreatPositionSync(
-                unit, enemies, situation.MinSafeDistance, maxSafeDistance,
-                0f, role, familiarPos, maxFamiliarDist);
-            if (best == null) return null;
-
             var currentNode = unit.Position.GetNearestNodeXZ() as Kingmaker.Pathfinding.CustomGridNodeBase;
-            if (currentNode == null || best.Node == null || best.Node == currentNode) return null;
+            if (currentNode == null) return null;
 
-            // Compare both tiles with the same measurements (the retreat fallback path leaves some fields unset).
+            // Stay where next turn's shot is still possible.
+            float keepInRange = situation.WeaponRange.EffectiveRange > 0f ? situation.WeaponRange.EffectiveRange : maxSafeDistance;
+            keepInRange = Math.Max(keepInRange, maxSafeDistance);
+
+            var tiles = MovementAPI.FindAllReachableTilesWithThreatsSync(unit, situation.CurrentMP);
+            if (tiles == null || tiles.Count == 0) return null;
+            bool avoidHazard = !CombatAPI.IsUnitInHazardZone(unit);
+
             var here = MeasureSafety(unit, currentNode, enemies);
-            var there = MeasureSafety(unit, best.Node, enemies);
+            float hereScore = SafetyScore(here);
+            Kingmaker.Pathfinding.CustomGridNodeBase bestNode = null;
+            TileSafety there = here;
+            float bestScore = hereScore;
+            int checkedTiles = 0;
 
-            string verdict;
-            if (there.MeleeReach < here.MeleeReach)
-                verdict = "fewer melee enemies can reach";
-            else if (there.MeleeReach > here.MeleeReach)
-                verdict = null;
-            else if (there.TurnThreat > here.TurnThreat + 0.25f)
-                verdict = null;
-            else if (there.TurnThreat <= here.TurnThreat - 0.5f)
-                verdict = "lower enemy-turn threat";
-            else if (there.Hide >= here.Hide + 15f)
-                verdict = "better cover";
-            else
-                verdict = null;
+            foreach (var kvp in tiles)
+            {
+                var cell = kvp.Value;
+                var node = cell.Node as Kingmaker.Pathfinding.CustomGridNodeBase;
+                if (node == null || !cell.IsCanStand || node == currentNode) continue;
+                var pos = node.Vector3Position;
+                if (avoidHazard && CombatAPI.IsPositionInHazardZone(pos, unit)) continue;
+                if (cell.ProvokedAttacks > 0) continue;  // don't walk through attacks of opportunity for it
+                if (!BattlefieldGrid.Instance.ValidateNode(unit, node)) continue;
+                if (familiarPos.HasValue && maxFamiliarDist > 0f && Vector3.Distance(pos, familiarPos.Value) > maxFamiliarDist) continue;
 
-            Log.Planning.Info($"[MovementPlanner] {unit.CharacterName}: End-of-turn reposition check " +
+                float nearest = float.MaxValue;
+                foreach (var e in enemies)
+                {
+                    if (e == null || e.LifeState.IsDead) continue;
+                    float d = CombatAPI.MetersToTiles(Vector3.Distance(pos, e.Position));
+                    if (d < nearest) nearest = d;
+                }
+                if (nearest > keepInRange) continue;
+
+                checkedTiles++;
+                var safety = MeasureSafety(unit, node, enemies);
+                float score = SafetyScore(safety);
+                if (score > bestScore) { bestScore = score; bestNode = node; there = safety; }
+            }
+
+            string verdict = null;
+            if (bestNode != null)
+            {
+                if (there.MeleeReach < here.MeleeReach) verdict = "fewer melee enemies can reach";
+                else if (bestScore >= hereScore + 15f)
+                    verdict = there.Hide > here.Hide ? "better cover" : "lower enemy-turn threat";
+            }
+
+            Log.Planning.Info($"[MovementPlanner] {unit.CharacterName}: End-of-turn reposition check ({checkedTiles} tiles) " +
                 $"here(melee={here.MeleeReach}, threat={here.TurnThreat:F1}, hide={here.Hide:F0}) " +
-                $"there(melee={there.MeleeReach}, threat={there.TurnThreat:F1}, hide={there.Hide:F0}, " +
-                $"pos=({best.Position.x:F1},{best.Position.z:F1})) → {(verdict ?? "stay")}");
+                $"best(melee={there.MeleeReach}, threat={there.TurnThreat:F1}, hide={there.Hide:F0}" +
+                (bestNode != null ? $", pos=({bestNode.Vector3Position.x:F1},{bestNode.Vector3Position.z:F1})" : "") +
+                $") → {(verdict ?? "stay")}");
 
             if (verdict == null) return null;
+            var best = new { Position = bestNode.Vector3Position };
 
             Core.TeamBlackboard.Instance?.ReserveMovePosition(best.Position);
             return PlannedAction.Move(best.Position, $"End-of-turn reposition ({verdict})");
@@ -1767,6 +1794,9 @@ namespace CompanionAI_v3.Planning.Planners
                 return destination;
             }
         }
+
+        /// <summary>Safety ranking for end-of-turn tiles: melee reach first, then enemy-turn threat, then cover.</summary>
+        private static float SafetyScore(TileSafety t) => -t.MeleeReach * 100f - t.TurnThreat * 15f + t.Hide;
 
         private struct TileSafety
         {
