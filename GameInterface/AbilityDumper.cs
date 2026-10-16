@@ -280,6 +280,7 @@ namespace CompanionAI_v3.GameInterface
                         try { sb.AppendLine($"      Cooldown: {ability.Cooldown} (onCooldown={ability.IsOnCooldown}, untilEndOfCombat={ability.IsOnCooldownUntilEndOfCombat})"); } catch { }
                         try { sb.AppendLine($"      Psyker: {bp.IsPsykerAbility}, HeroicAct: {bp.IsHeroicAct}, Weapon: {bp.IsWeaponAbility}"); } catch { }
                         try { sb.AppendLine($"      ModTiming: {AbilityDatabase.GetTiming(ability)}, GapCloser: {AbilityDatabase.IsGapCloser(ability)}"); } catch { }
+                        try { sb.AppendLine($"      EndsWeaponAttacks: {Planning.Planners.AbilityPolicy.EndsWeaponAttacks(ability)}, DesperateMeasure: {bp.IsDesperateMeasure}"); } catch { }
                         try
                         {
                             string desc = bp.Description;

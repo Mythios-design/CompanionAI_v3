@@ -219,6 +219,12 @@ namespace CompanionAI_v3.Execution
                 return ExecutionResult.Failure($"Ability unavailable: {comboBlockReason}");
             }
 
+            if (!Planning.Planners.AbilityPolicy.AllowAtExecution(ability, out string policyBlockReason))
+            {
+                Log.Engine.Info($"[Executor] {ability.Name} held back: {policyBlockReason}");
+                return ExecutionResult.Failure($"Ability unavailable: {policyBlockReason}");
+            }
+
             // ★ v3.0.93: 능력 자체가 사용 가능한지 먼저 체크 (쿨다운, 탄약, 충전 등)
             List<string> unavailableReasons;
             if (!CombatAPI.IsAbilityAvailable(ability, out unavailableReasons))

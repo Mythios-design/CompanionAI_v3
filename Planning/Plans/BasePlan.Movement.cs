@@ -457,6 +457,19 @@ namespace CompanionAI_v3.Planning.Plans
                     $"{RoleName} emergency heal", situation);
             }
 
+            // Phase 1.1: Self-heal below the character's own "heal at" setting, before spending AP elsewhere.
+            float healAt = situation.CharacterSettings?.HealAtHPPercent ?? 0f;
+            if (healAt > 0f && situation.HPPercent < healAt)
+            {
+                var selfHeal = PlanEmergencyHeal(situation, ref remainingAP, healAt);
+                if (selfHeal != null)
+                {
+                    actions.Add(selfHeal);
+                    return CreatePlanWithSnapshot(actions, TurnPriority.Emergency,
+                        $"{RoleName} self-heal below {healAt:F0}%", situation);
+                }
+            }
+
             // Phase 1.2: Pyromancer melee combo — burning blade setup or Endure refresh (early return)
             var comboActions = PyroMeleeCombo.PlanSetupOrUpkeep(situation, ref remainingAP, RoleName);
             if (comboActions != null)
