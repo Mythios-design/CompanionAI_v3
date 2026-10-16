@@ -143,6 +143,20 @@ namespace CompanionAI_v3.Planning
             // AttackFromCurrent 점수가 높아지고 MoveToAttack(더 나은 위치)이 선택되지 않음
             int currentHittable = situation.NormalHittableCount;
 
+            // Melee-preferring characters: when no melee attack can reach anyone, the analyzer falls back to
+            // ranged/psychic attacks so the character isn't idle. Those fallback targets must not count as
+            // "attack from here", or standing still always outscores walking into melee and the character
+            // never closes in. Count only enemies within actual melee reach.
+            if (situation.RangePreference == Settings.RangePreference.PreferMelee && situation.HasMeleeWeapon)
+            {
+                int meleeHittable = situation.MeleeHittableEnemies?.Count ?? 0;
+                if (meleeHittable < currentHittable)
+                {
+                    Log.Planning.Info($"[{roleName}] TacticalEval: PreferMelee — counting {meleeHittable} melee-reachable target(s), not {currentHittable} (ranged fallback)");
+                    currentHittable = meleeHittable;
+                }
+            }
+
             // 4가지 옵션 평가
             result.AllOptions[0] = EvaluateAttackFromCurrent(situation, currentHittable, needsRetreat);
             result.AllOptions[1] = EvaluateMoveToAttack(situation, currentHittable);
