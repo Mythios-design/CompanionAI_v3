@@ -669,7 +669,7 @@ namespace CompanionAI_v3.GameInterface
             if (goal == MovementGoal.RangedAttackPosition || goal == MovementGoal.Retreat
                 || goal == MovementGoal.FindCover || goal == MovementGoal.MaintainDistance)
             {
-                if (CombatAPI.GetRangePreference(unit) == Settings.RangePreference.PreferRanged)
+                if (CombatAPI.AvoidsMeleeReach(unit))
                 {
                     score.MeleeReachCount = CombatAPI.CountMeleeEnemiesThatCanReach(unit, node.Vector3Position, enemies);
                     score.MeleeReachPenalty = score.MeleeReachCount * MELEE_REACH_PENALTY;

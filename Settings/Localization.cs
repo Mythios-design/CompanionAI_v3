@@ -419,6 +419,12 @@ namespace CompanionAI_v3.Settings
                 { Language.Japanese, "敵の移動を予測してより安全な位置を選択します。\n次のターンに敵が移動できる位置を考慮します。" },
                 { Language.Chinese, "预测敌方移动以选择更安全的位置。\n考虑敌人下回合可能移动到的位置。" }
             },
+            ["Durable"] = new() {
+                { Language.English, "Durable: comfortable close to enemies" }
+            },
+            ["DurableDesc"] = new() {
+                { Language.English, "For characters who shrug off hits (regeneration, high dodge). The AI keeps a smaller safety distance and worries much less about melee enemies reaching them, so they can hold close positions." }
+            },
             ["AllowHeroicActs"] = new() {
                 { Language.English, "Allow Heroic Acts" }
             },

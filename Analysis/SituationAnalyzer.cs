@@ -192,6 +192,9 @@ namespace CompanionAI_v3.Analysis
             // 이전(v3.110.10까지): 사용자 설정 7m 기반 → Cone 무기 봉쇄.
             // 현재: EffectiveRange × 0.3. 근접/Scatter=0, Cone r=7→2.1, 볼터 15→4.5.
             situation.MinSafeDistance = situation.WeaponRange.ClampedMinSafeDistance;
+            // Durable characters can stand closer.
+            if (CombatAPI.IsDurable(unit))
+                situation.MinSafeDistance *= 0.5f;
 
             // ★ v3.9.72: 무기 세트 로테이션 분석
             if (situation.CharacterSettings?.EnableWeaponSetRotation == true &&

@@ -479,6 +479,14 @@ namespace CompanionAI_v3.Planning.Plans
                     $"{RoleName} burning blade", situation);
             }
 
+            // Phase 1.3: Big caster cone (Lidless Stare) when it covers enough enemies — ahead of buffs.
+            var coneActions = Planners.ConeStarePlanner.PlanCone(situation, ref remainingAP, RoleName);
+            if (coneActions != null)
+            {
+                actions.AddRange(coneActions);
+                return CreatePlanWithSnapshot(actions, TurnPriority.DirectAttack, $"{RoleName} cone attack", situation);
+            }
+
             // Phase 1.5: Reload (early return 없음 — 이후 Phase 계속 진행)
             var reloadAction = PlanReload(situation, ref remainingAP);
             if (reloadAction != null)

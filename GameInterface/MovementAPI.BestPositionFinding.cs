@@ -906,7 +906,7 @@ namespace CompanionAI_v3.GameInterface
             FindRetreatCacheMisses++;
 
             PositionScore _retreatResultBest = null;
-            bool preferRangedForMeleeReach = CombatAPI.GetRangePreference(unit) == Settings.RangePreference.PreferRanged;
+            bool preferRangedForMeleeReach = CombatAPI.AvoidsMeleeReach(unit);
             try {
             // ★ v3.8.13: AI용 패스파인딩 사용 - 경로 위협 데이터 포함
             var tiles = predictedMP > 0

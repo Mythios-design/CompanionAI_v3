@@ -54,6 +54,18 @@ namespace CompanionAI_v3.GameInterface
             }
         }
 
+        /// <summary>The character's "Durable" setting (comfortable close to enemies).</summary>
+        public static bool IsDurable(BaseUnitEntity unit)
+        {
+            if (unit == null) return false;
+            try { return Settings.ModSettings.Instance?.GetOrCreateSettings(unit.UniqueId, unit.CharacterName)?.Durable == true; }
+            catch { return false; }  // settings unavailable: treat as not durable
+        }
+
+        /// <summary>Ranged characters avoid tiles melee enemies can reach, unless they're marked Durable.</summary>
+        public static bool AvoidsMeleeReach(BaseUnitEntity unit)
+            => GetRangePreference(unit) == Settings.RangePreference.PreferRanged && !IsDurable(unit);
+
         public static bool NeedsReloadAnyRanged(BaseUnitEntity unit)
         {
             if (unit == null) return false;

@@ -1814,6 +1814,10 @@ namespace CompanionAI_v3.UI
             GUILayout.Label($"<color={UIStyles.TextMid}>{L("FinishLowHPEnemiesDesc")}</color>", UIStyles.Description);
             UIStyles.Space(UIStyles.SpaceLG);
 
+            _editingSettings.Durable = DrawCheckbox(_editingSettings.Durable, L("Durable"));
+            GUILayout.Label($"<color={UIStyles.TextMid}>{L("DurableDesc")}</color>", UIStyles.Description);
+            UIStyles.Space(UIStyles.SpaceLG);
+
             DrawHeroicActSettings();
             UIStyles.Space(UIStyles.SpaceLG);
 

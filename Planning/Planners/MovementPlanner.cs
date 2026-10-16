@@ -1544,6 +1544,9 @@ namespace CompanionAI_v3.Planning.Planners
             if (returnableMP <= 0f) returnableMP = remainingMP;
             float returnableTiles = returnableMP / CombatAPI.GridCellSize;
             maxSafeDistance = Math.Max(maxSafeDistance, weaponRange + returnableTiles);
+            // Characters with a big cone (Lidless Stare) don't back off beyond its reach.
+            float coneReach = ConeStarePlanner.KnownConeRange(unit);
+            if (coneReach > 0f) maxSafeDistance = Math.Min(maxSafeDistance, coneReach);
 
             AIRole role = situation.CharacterSettings?.Role ?? AIRole.Auto;
 
@@ -1631,8 +1634,13 @@ namespace CompanionAI_v3.Planning.Planners
             if (tiles == null || tiles.Count == 0) return null;
             bool avoidHazard = !CombatAPI.IsUnitInHazardZone(unit);
 
+            bool durable = CombatAPI.IsDurable(unit);
+            // Characters with a big cone (Lidless Stare) stay within its reach for next turn.
+            float coneRange = ConeStarePlanner.KnownConeRange(unit);
+            if (coneRange > 0f) keepInRange = Math.Min(keepInRange, coneRange);
+
             var here = MeasureSafety(unit, currentNode, enemies);
-            float hereScore = SafetyScore(here);
+            float hereScore = SafetyScore(here, durable);
             Kingmaker.Pathfinding.CustomGridNodeBase bestNode = null;
             TileSafety there = here;
             float bestScore = hereScore;
@@ -1660,14 +1668,14 @@ namespace CompanionAI_v3.Planning.Planners
 
                 checkedTiles++;
                 var safety = MeasureSafety(unit, node, enemies);
-                float score = SafetyScore(safety);
+                float score = SafetyScore(safety, durable);
                 if (score > bestScore) { bestScore = score; bestNode = node; there = safety; }
             }
 
             string verdict = null;
             if (bestNode != null)
             {
-                if (there.MeleeReach < here.MeleeReach) verdict = "fewer melee enemies can reach";
+                if (there.MeleeReach < here.MeleeReach && !durable) verdict = "fewer melee enemies can reach";
                 else if (bestScore >= hereScore + 15f)
                     verdict = there.Hide > here.Hide ? "better cover" : "lower enemy-turn threat";
             }
@@ -1796,7 +1804,8 @@ namespace CompanionAI_v3.Planning.Planners
         }
 
         /// <summary>Safety ranking for end-of-turn tiles: melee reach first, then enemy-turn threat, then cover.</summary>
-        private static float SafetyScore(TileSafety t) => -t.MeleeReach * 100f - t.TurnThreat * 15f + t.Hide;
+        private static float SafetyScore(TileSafety t, bool durable = false)
+            => -t.MeleeReach * (durable ? 25f : 100f) - t.TurnThreat * 15f + t.Hide;
 
         private struct TileSafety
         {

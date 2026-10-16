@@ -62,6 +62,12 @@ namespace CompanionAI_v3.Settings
 
         /// <summary>Heroic Act order: 1 goes first, then 2, and so on. 0 = unranked (after all ranked).</summary>
         public int HeroicActOrder { get; set; } = 0;
+
+        /// <summary>
+        /// Durable characters (strong regeneration, high dodge) can stand closer to enemies: smaller safety
+        /// distance and much less weight on melee enemies being able to reach them.
+        /// </summary>
+        public bool Durable { get; set; } = false;
         public bool AvoidFriendlyFire { get; set; } = true;
 
         // ★ v3.110.11: MinEnemiesForAoE 삭제 — ClusterDetector.MIN_CLUSTER_SIZE (AIConfig)로 중앙집중.
@@ -497,6 +503,7 @@ namespace CompanionAI_v3.Settings
                     FinishLowHPEnemies = DefaultSettings.FinishLowHPEnemies,
                     AllowHeroicActs = DefaultSettings.AllowHeroicActs,
                     HeroicActOrder = DefaultSettings.HeroicActOrder,
+                    Durable = DefaultSettings.Durable,
                     AvoidFriendlyFire = DefaultSettings.AvoidFriendlyFire,
                     AllowRetreat = DefaultSettings.AllowRetreat,
                     SeekCover = DefaultSettings.SeekCover,
