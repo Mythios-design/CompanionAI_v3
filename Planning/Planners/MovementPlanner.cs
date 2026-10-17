@@ -1024,8 +1024,14 @@ namespace CompanionAI_v3.Planning.Planners
                                 MoveDecisionTracker.Set(MoveDecisionReason.ApproachCancelledBySafety, $"approach {approachDistToEnemy:F1} < MinSafe {situation.MinSafeDistance:F1}");
                                 return null;
                             }
-                            Log.Planning.Info($"[{roleName}] PlanMoveToEnemy: Safe approach ({approachDistToEnemy:F1} tiles from enemy)");
                             var approachPos = PreferCoverNear(situation, safeApproach.Position, target, effectiveMP, roleName);
+                            // Don't "move" to the tile she's standing on: that repeats every replan and wastes the turn
+                            if (CombatAPI.MetersToTiles(Vector3.Distance(approachPos, unit.Position)) < 1f)
+                            {
+                                Log.Planning.Info($"[{roleName}] PlanMoveToEnemy: approach tile is where {unit.CharacterName} already stands - not moving");
+                                return null;
+                            }
+                            Log.Planning.Info($"[{roleName}] PlanMoveToEnemy: Safe approach ({approachDistToEnemy:F1} tiles from enemy)");
                             return PlannedAction.Move(approachPos, $"Safe approach {target.CharacterName}");
                         }
                         if (Main.IsDebugEnabled) Log.Planning.Debug($"[{roleName}] PlanMoveToEnemy: No safe ranged position found (effectiveMP={effectiveMP:F1})");

@@ -1343,6 +1343,12 @@ namespace CompanionAI_v3.GameInterface
                 return hittableCandidate;
             }
 
+            // No tile this turn can hit: for ranged characters, follow the path toward the nearest tile (within two
+            // turns) that can see an enemy, instead of the straight-line closest tile, which often ends at a wall
+            var sightStep = LineOfSightApproach.FindStepTowardSight(unit, tiles,
+                predictedMP > 0 ? predictedMP : CombatAPI.GetCurrentMP(unit));
+            if (sightStep != null) return sightStep;
+
             if (closestCandidate != null)
             {
                 Log.Engine.Info($"[MovementAPI] {unit.CharacterName}: Euclidean approach (closest, hittable=0) to ({closestCandidate.Position.x:F1},{closestCandidate.Position.z:F1}) dist={closestDist:F1}m, pathRisk={lowestPathRisk:F1} to {target.CharacterName}");
