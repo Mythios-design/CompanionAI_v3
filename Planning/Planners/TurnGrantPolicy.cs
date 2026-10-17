@@ -38,11 +38,15 @@ namespace CompanionAI_v3.Planning.Planners
                 // Each value is null when it isn't a plain number (e.g. scales with a stat).
                 ReadGrantedPoints(grant, out int? ap, out int? mp, out string detail);
 
-                // AP only: both values known.
+                // AP only (Bring It Down!): ranged allies must be able to shoot an enemy from where they stand;
+                // melee allies must be engaged, with an enemy within reach of a melee weapon attack.
                 if (ap > 0 && mp == 0)
                 {
-                    if (CanHitFromCurrentPosition(target)) return true;
-                    why = $"{target.CharacterName} can't hit any enemy from where they stand (bonus turn gives {ap} AP, no MP)";
+                    bool melee = IsMeleeCharacter(target);
+                    if (CanHitFromCurrentPosition(target, meleeOnly: melee)) return true;
+                    why = melee
+                        ? $"{target.CharacterName} is a melee character and not engaged (bonus turn gives {ap} AP, no MP)"
+                        : $"{target.CharacterName} can't hit any enemy from where they stand (bonus turn gives {ap} AP, no MP)";
                     return false;
                 }
 
@@ -87,11 +91,20 @@ namespace CompanionAI_v3.Planning.Planners
             }
         }
 
+        /// <summary>Set to prefer melee, or holding a melee weapon in the main hand.</summary>
+        private static bool IsMeleeCharacter(BaseUnitEntity unit)
+        {
+            if (CombatAPI.GetEffectiveRangePreference(unit) == RangePreference.PreferMelee) return true;
+            var weapon = unit.Body?.PrimaryHand?.MaybeWeapon;
+            return weapon?.Blueprint != null && weapon.Blueprint.IsMelee;
+        }
+
         /// <summary>
         /// Can any of the unit's weapon attacks reach an enemy from its current tile? Ignores cooldowns: the game
-        /// resets them for the bonus turn, and the ally may have attacked already this round.
+        /// resets them for the bonus turn, and the ally may have attacked already this round. With meleeOnly, only
+        /// melee weapon attacks count (an enemy within melee reach = engaged).
         /// </summary>
-        private static bool CanHitFromCurrentPosition(BaseUnitEntity unit)
+        private static bool CanHitFromCurrentPosition(BaseUnitEntity unit, bool meleeOnly = false)
         {
             var node = unit.Position.GetNearestNodeXZ() as CustomGridNodeBase;
             var raw = unit.Abilities?.RawFacts;
@@ -104,6 +117,10 @@ namespace CompanionAI_v3.Planning.Planners
                 var ability = fact?.Data;
                 if (ability?.Weapon == null || ability.Blueprint == null || !ability.Blueprint.CanTargetEnemies) continue;
                 if (AbilityDatabase.IsReload(ability) || CombatHelpers.IsGrenadeOrExplosive(ability)) continue;
+                // Gap closers move the unit and are often held back (e.g. Death From Above kept in reserve), so they
+                // don't count as hitting from where the unit stands
+                if (AbilityDatabase.IsGapCloser(ability)) continue;
+                if (meleeOnly && !ability.IsMelee) continue;
                 if (CombatAPI.CountHittableEnemiesFromPosition(unit, node, enemies, ability) > 0) return true;
             }
             return false;

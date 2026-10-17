@@ -743,13 +743,12 @@ namespace CompanionAI_v3.GameInterface
         /// 두 모드:
         /// - **Sequential chain** (maxChain &lt; 50): AbilityDeliverChain 류. nearest-next 알고리즘.
         ///   게임 SelectNextTarget (AbilityDeliverChain.cs:132) 동일 패턴.
-        /// - **Pattern trail** (maxChain &gt;= 50): AbilityTargetsInPatternTrail 류. 보수적
-        ///   radius-around-(caster|target) 검사 — 캐스터/타겟 양쪽 radius 내 ally 카운트.
-        ///   게임은 cone/ray pattern 따라가지만 plan 시점에 정확한 pattern 구성 어려움 → 보수적 dual-radius.
+        /// - **Pattern trail** (maxChain &gt;= 50): AbilityTargetsInPatternTrail 류. Allies within the radius of the
+        ///   target that was hit count; allies near the shooter do not.
         ///
         /// 친선 사격 카운트: ally + immunity 미보유 만.
         /// </summary>
-        private static int SimulateWeaponChainAllyHits(
+        internal static int SimulateWeaponChainAllyHits(
             BaseUnitEntity initialTarget, BaseUnitEntity caster,
             int radiusCells, int maxChain)
         {
@@ -760,7 +759,8 @@ namespace CompanionAI_v3.GameInterface
 
             try
             {
-                // Pattern trail mode: dual-radius (caster + target)
+                // Pattern trail mode: the arc spreads from the target that was hit, so only allies near the target
+                // count. Allies standing near the shooter are not at risk.
                 if (maxChain >= 50)
                 {
                     foreach (var unit in Game.Instance.State.AllBaseUnits)
@@ -771,8 +771,7 @@ namespace CompanionAI_v3.GameInterface
                         if (CombatAPI.IsImmuneToFriendlyFire(unit)) continue;
 
                         float distFromTarget = (float)unit.DistanceToInCells(initialTarget.Position);
-                        float distFromCaster = (float)unit.DistanceToInCells(caster.Position);
-                        if (distFromTarget <= radiusCells || distFromCaster <= radiusCells)
+                        if (distFromTarget <= radiusCells)
                             alliesHit++;
                     }
                     return alliesHit;

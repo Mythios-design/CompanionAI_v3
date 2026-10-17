@@ -263,6 +263,11 @@ namespace CompanionAI_v3.Planning.Plans
             for (int i = 0; i < _sharedNewHittable.Count; i++)
                 situation.HittableEnemies.Add(_sharedNewHittable[i]);
 
+            // A Blood Oath target hittable from the destination stays the target
+            var oathTarget = Planners.BladedancerTactics.GetOathTarget(situation);
+            if (oathTarget != null && _sharedNewHittable.Contains(oathTarget))
+                situation.BestTarget = oathTarget;
+
             // BestTarget이 더 이상 Hittable이 아니면 새 BestTarget 선택
             if (situation.BestTarget != null && !_sharedNewHittable.Contains(situation.BestTarget))
             {

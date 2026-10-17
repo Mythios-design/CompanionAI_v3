@@ -95,6 +95,12 @@ namespace CompanionAI_v3.Core
         /// </summary>
         public BaseUnitEntity ReservedTarget { get; set; }
 
+        /// <summary>
+        /// The enemy a point-target action is aimed at (e.g. the enemy a Death From Above jump lands next to). The
+        /// point itself can't tell if that enemy died first, so the plan is rebuilt when it does.
+        /// </summary>
+        public BaseUnitEntity IntendedTarget { get; set; }
+
         /// <summary>실행 완료 여부</summary>
         public bool IsExecuted { get; set; }
 

@@ -76,6 +76,7 @@ namespace CompanionAI_v3.Planning.Planners
         {
             if (situation.AvailableHeals.Count == 0) return null;
             if (ally == null) return null;
+            if (BladedancerTactics.HoldAllyHealForOath(situation, ally, roleName)) return null;
 
             // ★ v3.5.10: 이미 다른 Support가 힐 예약한 대상은 스킵
             if (TeamBlackboard.Instance.IsHealReserved(ally))
@@ -230,6 +231,7 @@ namespace CompanionAI_v3.Planning.Planners
 
             var unit = situation.Unit;
             if (unit == null || woundedAlly == null) return null;
+            if (BladedancerTactics.HoldAllyHealForOath(situation, woundedAlly, roleName)) return null;
 
             // 최장 사거리 파악 (탐색 범위 최대화)
             int maxHealRange = 0;

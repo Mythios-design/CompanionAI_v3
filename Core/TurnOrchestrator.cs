@@ -1490,6 +1490,7 @@ namespace CompanionAI_v3.Core
             Log.Engine.Warn($"[Orchestrator] {unit.CharacterName}: game refused {ability?.Name ?? "cast"} (cost={cost:F1}, AP={ap:F1}, MP={CombatAPI.GetCurrentMP(unit):F1})");
 
             RollbackLastCastRecord(turnState, ability);
+            Planning.Planners.BladedancerTactics.OnCastRefused(unit, ability);
             if (ability != null) AbilityUsageTracker.MarkFailed(unit.UniqueId, ability);
 
             turnState.CastRefusedCount++;

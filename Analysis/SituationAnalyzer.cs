@@ -146,6 +146,7 @@ namespace CompanionAI_v3.Analysis
             // 따라서 게임 API 값을 직접 사용 (TurnState 값은 참조용)
             situation.CurrentAP = CombatAPI.GetCurrentAP(unit);
             situation.CurrentMP = CombatAPI.GetCurrentMP(unit);
+            Planning.Planners.BladedancerTactics.ObserveMP(unit, situation.CurrentMP);
             // MovementBlockedThisTurn: 이동 설정 실패 반복 후 이번 턴 이동 계획 차단 (TurnOrchestrator.NotifyMoveSetupFailed).
             //   플래너는 CanMove 로 이동 여부를 판단하므로 여기서 미러해 제자리 플랜을 유도한다.
             situation.CanMove = situation.CurrentMP > 0 && CombatAPI.CanMove(unit)
@@ -217,6 +218,7 @@ namespace CompanionAI_v3.Analysis
             {
                 situation.CurrentWeaponSetIndex = CombatAPI.GetCurrentWeaponSetIndex(unit);
                 WeaponSetAnalyzer.GetHomeSet(unit);  // remember the starting loadout
+                LoadoutProfiles.Get(unit);  // built and logged once per combat
                 situation.WeaponSetData = WeaponSetAnalyzer.AnalyzeBothSets(unit);
 
                 if (situation.WeaponSetData == null) return;
@@ -648,6 +650,14 @@ namespace CompanionAI_v3.Analysis
             situation.BestTarget = situation.HittableEnemies.Count > 0
                 ? TargetScorer.SelectBestEnemy(situation.HittableEnemies, situation, effectiveRole)
                 : situation.NearestEnemy;  // 폴백: 가장 가까운 적
+
+            // A Bladedancer's Blood Oath target is her target until it dies
+            var oathTarget = Planning.Planners.BladedancerTactics.GetOathTarget(situation);
+            if (oathTarget != null && oathTarget != situation.BestTarget)
+            {
+                Log.Analysis.Info($"[Analyzer] {unit.CharacterName}: target set to Blood Oath target {oathTarget.CharacterName}");
+                situation.BestTarget = oathTarget;
+            }
 
             // ★ v3.0.78: PrimaryAttack 선택 (BestTarget 설정 후)
             // 이전: AnalyzeAbilities()에서 선택 → BestTarget=null

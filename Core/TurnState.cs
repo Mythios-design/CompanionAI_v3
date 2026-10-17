@@ -282,6 +282,8 @@ namespace CompanionAI_v3.Core
 
             if (success)
             {
+                Planning.Planners.BladedancerTactics.OnActionExecuted(Unit, action);
+
                 ConsecutiveFailures = 0;
 
                 // 상태 플래그 업데이트

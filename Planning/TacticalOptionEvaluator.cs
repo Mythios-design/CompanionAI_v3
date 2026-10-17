@@ -346,9 +346,12 @@ namespace CompanionAI_v3.Planning
 
                 // ★ v3.34.0: MPBuffAbility가 있으면 확장 MP로 도달 범위 확대
                 float meleeExtraMP = situation.MPBuffExpectedRecovery > 0 ? situation.MPBuffExpectedRecovery : 0f;
+                // A Bladedancer's Blood Oath target first; the nearest enemy if she can't get next to it this turn
+                var oathTarget = Planners.BladedancerTactics.GetOathTarget(situation);
+                var meleeTarget = oathTarget ?? situation.NearestEnemy;
                 bestPosition = MovementAPI.FindMeleeAttackPositionSync(
                     unit,
-                    situation.NearestEnemy,
+                    meleeTarget,
                     meleeRange,
                     meleeExtraMP,  // ★ v3.34.0: MP 버프 예상 회복량 반영
                     role,
@@ -358,6 +361,13 @@ namespace CompanionAI_v3.Planning
                                               //   v3.74.2 oscillation guard 가 Phase 5.9 경로에서도 적용되도록 통일.
                                               //   부수 효과: FindMelee whole-result cache 가 MovementPlanner 와 같은 key 로 hit.
                 );
+                if (bestPosition == null && oathTarget != null && oathTarget != situation.NearestEnemy)
+                {
+                    Log.Planning.Info($"[TacticalEval] Can't get next to Blood Oath target {oathTarget.CharacterName} this turn - using nearest enemy");
+                    meleeTarget = situation.NearestEnemy;
+                    bestPosition = MovementAPI.FindMeleeAttackPositionSync(unit, meleeTarget, meleeRange, meleeExtraMP,
+                        role, null, situation.Enemies, situation.LastMoveOrigin);
+                }
 
                 // FindMeleeAttackPositionSync는 HittableEnemyCount를 설정하지 않음
                 // 위치가 적의 근접 사거리 내이므로 최소 1명 공격 가능
@@ -368,7 +378,7 @@ namespace CompanionAI_v3.Planning
 
                 if (Main.IsDebugEnabled)
                     Log.Planning.Debug($"[TacticalEval] Melee MoveToAttack: " +
-                        $"target={situation.NearestEnemy.CharacterName}, meleeRange={meleeRange:F1}, " +
+                        $"target={meleeTarget.CharacterName}, meleeRange={meleeRange:F1}, " +
                         $"result={(bestPosition != null ? $"pos=({bestPosition.Position.x:F1},{bestPosition.Position.z:F1})" : "null")}");
             }
             else

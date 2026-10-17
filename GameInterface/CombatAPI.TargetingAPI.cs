@@ -555,6 +555,9 @@ namespace CompanionAI_v3.GameInterface
             /// <summary>★ v3.26.0: 추정 패리율 (0-95%, 근접만)</summary>
             public int EstimatedParryChance { get; set; }
 
+            /// <summary>Chance a shot that would hit strikes the target's cover instead (game rule, up to 95%).</summary>
+            public int CoverHitChance { get; set; }
+
             /// <summary>거리 계수 (1.0=최적, 0.5=절반 이상, 0.0=사거리 초과)</summary>
             public float DistanceFactor { get; set; }
 
@@ -579,6 +582,14 @@ namespace CompanionAI_v3.GameInterface
             }
         }
 
+        /// <summary>The game's chance that the shot hits cover instead of the target (0 when not in cover).</summary>
+        private static int CoverHitChance(RuleCalculateHitChances hitRule)
+        {
+            if (hitRule.ResultLos == LosCalculations.CoverType.None) return 0;
+            int chance = hitRule.ResultCoverHitChanceRule?.ResultChance ?? 0;
+            return Math.Max(0, Math.Min(100, chance));
+        }
+
         /// <summary>
         /// ★ v3.6.7: 원거리 공격의 명중률 계산
         /// RuleCalculateHitChances 룰 시스템 사용
@@ -595,6 +606,7 @@ namespace CompanionAI_v3.GameInterface
             try
             {
                 int rawHitChance;
+                int coverHitChance = 0;
                 float distanceFactor = 1.0f;
                 var coverType = LosCalculations.CoverType.None;
 
@@ -616,6 +628,7 @@ namespace CompanionAI_v3.GameInterface
                     rawHitChance = hitRule.ResultHitChance;
                     distanceFactor = hitRule.DistanceFactor;
                     coverType = hitRule.ResultLos;
+                    coverHitChance = CoverHitChance(hitRule);
                 }
 
                 // ★ v3.26.0: Dodge/Parry 추정 → 실질 명중률 계산
@@ -623,6 +636,8 @@ namespace CompanionAI_v3.GameInterface
                 int parryChance = EstimateParryChance(target, attacker, ability);
                 // Helper: CombatAPI.UnitQueries.cs
                 int effectiveHitChance = CalculateEffectiveHitChance(rawHitChance, dodgeChance, parryChance);
+                // A shot that would hit can strike the target's cover instead
+                effectiveHitChance = effectiveHitChance * (100 - coverHitChance) / 100;
 
                 var result = new HitChanceInfo
                 {
@@ -630,13 +645,14 @@ namespace CompanionAI_v3.GameInterface
                     RawBSHitChance = rawHitChance,         // 원본 보존
                     EstimatedDodgeChance = dodgeChance,
                     EstimatedParryChance = parryChance,
+                    CoverHitChance = coverHitChance,
                     DistanceFactor = distanceFactor,
                     CoverType = coverType
                 };
 
                 if (Main.IsDebugEnabled)
                     Log.Engine.Debug($"[CombatAPI] HitChance: {attacker.CharacterName} -> {target.CharacterName}: " +
-                        $"BS={rawHitChance}% dodge={dodgeChance}% parry={parryChance}% → effective={effectiveHitChance}%");
+                        $"BS={rawHitChance}% dodge={dodgeChance}% parry={parryChance}% cover-hit={coverHitChance}% ({coverType}) → effective={effectiveHitChance}%");
 
                 return result;
             }
@@ -662,6 +678,7 @@ namespace CompanionAI_v3.GameInterface
             try
             {
                 int rawHitChance;
+                int coverHitChance = 0;
                 float distanceFactor = 1.0f;
                 var coverType = LosCalculations.CoverType.None;
 
@@ -683,6 +700,7 @@ namespace CompanionAI_v3.GameInterface
                     rawHitChance = hitRule.ResultHitChance;
                     distanceFactor = hitRule.DistanceFactor;
                     coverType = hitRule.ResultLos;
+                    coverHitChance = CoverHitChance(hitRule);
                 }
 
                 // ★ v3.26.0: Dodge/Parry 추정 → 실질 명중률
@@ -690,6 +708,8 @@ namespace CompanionAI_v3.GameInterface
                 int parryChance = EstimateParryChance(target, attacker, ability);
                 // Helper: CombatAPI.UnitQueries.cs
                 int effectiveHitChance = CalculateEffectiveHitChance(rawHitChance, dodgeChance, parryChance);
+                // A shot that would hit can strike the target's cover instead
+                effectiveHitChance = effectiveHitChance * (100 - coverHitChance) / 100;
 
                 return new HitChanceInfo
                 {
@@ -697,6 +717,7 @@ namespace CompanionAI_v3.GameInterface
                     RawBSHitChance = rawHitChance,
                     EstimatedDodgeChance = dodgeChance,
                     EstimatedParryChance = parryChance,
+                    CoverHitChance = coverHitChance,
                     DistanceFactor = distanceFactor,
                     CoverType = coverType
                 };

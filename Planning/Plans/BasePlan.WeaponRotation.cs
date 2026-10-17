@@ -3,6 +3,7 @@ using CompanionAI_v3.Analysis;
 using CompanionAI_v3.Core;
 using CompanionAI_v3.GameInterface;
 using CompanionAI_v3.Logging;
+using CompanionAI_v3.Planning.Planners;
 
 namespace CompanionAI_v3.Planning.Plans
 {
@@ -43,6 +44,8 @@ namespace CompanionAI_v3.Planning.Plans
             var alternateSetData = situation.WeaponSetData?[alternateSet];
             string alternateName = alternateSetData?.PrimaryWeaponName ?? $"Set{alternateSet}";
 
+            if (!IsSwitchWorthIt(situation, alternateSet)) return actions;
+
             // WeaponSwitch만 계획 — 전환 후 re-analysis에서 공격 자동 계획
             var switchAction = PlannedAction.WeaponSwitch(alternateSet,
                 $"Switch to {alternateName} for rotation");
@@ -53,6 +56,45 @@ namespace CompanionAI_v3.Planning.Plans
                 $"attacks will be planned after re-analysis (AP={remainingAP:F1})");
 
             return actions;
+        }
+
+        /// <summary>
+        /// Final check for every weapon switch, whichever rule asked for it:
+        ///  - Weapon attacks already spent this turn (all weapon attacks share one cooldown): a switch gains nothing,
+        ///    unless switching itself grants a bonus attack (e.g. Versatility).
+        ///  - The other set must be able to attack: hit an enemy from here, or, when the set in hand hits nobody,
+        ///    reach more enemies than the set in hand after moving.
+        ///  - After a switch this turn, switching again needs the other set to hit strictly more enemies from here.
+        ///    Stops the two sets being swapped back and forth when neither can hit.
+        /// </summary>
+        protected bool IsSwitchWorthIt(Situation situation, int targetSet)
+        {
+            var unit = situation.Unit;
+            if (!situation.HasWeaponSwitchBonus && WeaponSetForecast.WeaponAttacksSpent(unit))
+            {
+                Log.Planning.Info($"[{RoleName}] Weapon switch skipped: weapon attacks already used this turn");
+                return false;
+            }
+
+            var forecast = WeaponSetForecast.Evaluate(situation, targetSet);
+            int inHand = situation.HittableEnemies?.Count ?? 0;
+
+            var turnState = TurnOrchestrator.Instance?.GetCurrentTurnState();
+            if (turnState != null && turnState.WeaponSwitchCount > 0 && !situation.HasWeaponSwitchBonus
+                && forecast.HittableHere <= inHand)
+            {
+                Log.Planning.Info($"[{RoleName}] Weapon choice: already switched this turn, {forecast.Summary()} is no better than the set in hand ({inHand}) -> stay");
+                return false;
+            }
+
+            bool worth = forecast.CanAttackHere;
+            if (!worth && inHand == 0 && situation.CurrentMP > 0 && forecast.Unusable == null)
+            {
+                var inHandForecast = WeaponSetForecast.Evaluate(situation, situation.CurrentWeaponSetIndex);
+                worth = forecast.ReachableAfterMove > inHandForecast.ReachableAfterMove;
+            }
+            Log.Planning.Info($"[{RoleName}] Weapon choice: set in hand hits {inHand}, {forecast.Summary()} -> {(worth ? "switch" : "stay")}");
+            return worth;
         }
 
         /// <summary>
@@ -129,14 +171,17 @@ namespace CompanionAI_v3.Planning.Plans
                 }
             }
 
-            // ★ v3.9.76: Case 4: 같은 타입(둘 다 원거리 등)이지만 현재 무기가 hittable=0
-            // 대체 무기 사거리가 최근접 적에 도달 가능하면 전환 시도
-            // 예: 현재 AoE 화염방사기(아군 안전 차단) → 대체 단일타겟 볼터
-            float altRange = altSet.PrimaryWeaponRange;
-            if (altRange > 0 && situation.NearestEnemyDistance <= altRange)
+            // Case 4: the current set can't hit anyone (out of range, no line of sight, or blocked by friendly-fire
+            // rules such as an arc weapon's chain) but the other set can, from here or after moving.
+            // e.g. Arc Rifle blocked by allies next to the target -> Sniper Rifle.
+            if (!situation.HasHittableEnemies)
             {
-                if (Main.IsDebugEnabled) Log.Planning.Debug($"[{RoleName}] ShouldSwitchFirst: same type but current unhittable, alt range {altRange:F0} >= enemy dist {situation.NearestEnemyDistance:F1}");
-                return true;
+                var forecast = WeaponSetForecast.Evaluate(situation, altIdx);
+                if (forecast.CanAttackHere || (situation.CurrentMP > 0 && forecast.Unusable == null && forecast.ReachableAfterMove > 0))
+                {
+                    Log.Planning.Info($"[{RoleName}] Weapon choice: current set hits 0, {forecast.Summary()} -> switch");
+                    return true;
+                }
             }
 
             return false;
@@ -272,6 +317,19 @@ namespace CompanionAI_v3.Planning.Plans
                 float nearest = situation.NearestEnemyDistanceTiles;
                 bool homeReaches = (altSet.HasRangedWeapon && altSet.PrimaryWeaponRange > 0 && nearest <= altSet.PrimaryWeaponRange)
                     || (altSet.HasMeleeWeapon && nearest <= situation.CurrentMP + 2f);
+                // Only go home if the main loadout can hit someone, and at least as many enemies as the set in hand.
+                // Stops a swap made because the main weapon was blocked (e.g. arc chain near allies) from being
+                // undone at once, and stops swapping home when neither set can hit anyone.
+                if (homeReaches)
+                {
+                    var homeForecast = WeaponSetForecast.Evaluate(situation, alt);
+                    int inHand = situation.HittableEnemies?.Count ?? 0;
+                    if (homeForecast.HittableHere == 0 || homeForecast.HittableHere < inHand)
+                    {
+                        Log.Planning.Info($"[{RoleName}] Weapon choice: staying on {curSet.PrimaryWeaponName} (hits {inHand}), {homeForecast.Summary()}");
+                        return false;
+                    }
+                }
                 if (homeReaches)
                 {
                     Log.Planning.Info($"[{RoleName}] Weapon switch: no enemy adjacent — back to main weapon {altSet.PrimaryWeaponName}");

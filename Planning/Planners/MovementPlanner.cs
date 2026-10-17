@@ -163,6 +163,14 @@ namespace CompanionAI_v3.Planning.Planners
         /// </summary>
         private static BaseUnitEntity GetTacticalMoveTarget(Situation situation)
         {
+            // 0. A Bladedancer's Blood Oath target comes first: the kill is what pays for the oath
+            var oathTarget = BladedancerTactics.GetOathTarget(situation);
+            if (oathTarget != null)
+            {
+                Log.Planning.Info($"[MovementPlanner] ★ Using Blood Oath target: {oathTarget.CharacterName}");
+                return oathTarget;
+            }
+
             // 1. Blackboard의 SharedTarget 확인
             // ★ v3.40.8: 면역 타겟 필터 — 데미지 면역 적에게 이동 방지
             var sharedTarget = TeamBlackboard.Instance?.SharedTarget;
@@ -279,6 +287,8 @@ namespace CompanionAI_v3.Planning.Planners
 
                 foreach (var candidateTarget in targetsToTry)
                 {
+                    if (!BladedancerTactics.AllowJumpAsGapCloser(situation, gapCloser, candidateTarget, roleName)) continue;
+
                     // ★ v3.5.34: MP 비용 체크 (실제 타일 경로 기반)
                     // ★ v3.9.22: MP=0이어도 GapCloser 시도 허용 — 게임 자체 경로 검증 + CanUseAbilityOn이 최종 판정
                     // 기존: MP 프리필터가 MP=0일 때 모든 GapCloser 차단 (돌격 불가 버그)
@@ -319,7 +329,9 @@ namespace CompanionAI_v3.Planning.Planners
                                     if (remainingMP < 0) remainingMP = 0;
                                 }
                                 Log.Planning.Info($"[{roleName}] Position gap closer: {gapCloser.Name} -> near {candidateTarget.CharacterName} (AP:{cost:F1}, MP:{mpCost:F1})");
-                                return PlannedAction.PositionalAttack(gapCloser, landingPosition.Value, $"Jump to {candidateTarget.CharacterName}", cost);
+                                var jumpAction = PlannedAction.PositionalAttack(gapCloser, landingPosition.Value, $"Jump to {candidateTarget.CharacterName}", cost);
+                                jumpAction.IntendedTarget = candidateTarget;
+                                return jumpAction;
                             }
                             else
                             {
@@ -411,6 +423,7 @@ namespace CompanionAI_v3.Planning.Planners
                     foreach (var candidateTarget in situation.Enemies)
                     {
                         if (candidateTarget == null || !candidateTarget.IsConscious) continue;
+                        if (!BladedancerTactics.AllowJumpAsGapCloser(situation, gapCloser, candidateTarget, roleName)) continue;
                         float dist = CombatCache.GetDistanceInTiles(situation.Unit, candidateTarget);
 
                         // 직접 점프로 도달 가능했으면 이미 위에서 처리됨
@@ -444,7 +457,9 @@ namespace CompanionAI_v3.Planning.Planners
                         if (remainingMP < 0) remainingMP = 0;
 
                         Log.Planning.Info($"[{roleName}] ★ Walk+GapCloser: walk {walkDist:F1} tiles → {gapCloser.Name} → near {candidateTarget.CharacterName} (dist={dist:F1}, gcRange={gcRange:F0})");
-                        return PlannedAction.PositionalAttack(gapCloser, landing.Value, $"Jump to {candidateTarget.CharacterName} after walk", cost);
+                        var walkJump = PlannedAction.PositionalAttack(gapCloser, landing.Value, $"Jump to {candidateTarget.CharacterName} after walk", cost);
+                        walkJump.IntendedTarget = candidateTarget;
+                        return walkJump;
                     }
                 }
             }
@@ -762,6 +777,8 @@ namespace CompanionAI_v3.Planning.Planners
 
                     // ★ v3.18.24: 스코어 기반 선택 — Self-AoE 아군 근접 페널티
                     float candidateScore = -distFromCaster; // 기본: 가까울수록 높은 점수 (거리 차이 ~0-2)
+                    // Death From Above damages every enemy next to the landing: prefer tiles next to more of them
+                    candidateScore += BladedancerTactics.LandingBonus(gapCloserAbility, nodePos, situation);
 
                     if (hasSelfAoE && situation.Allies != null)
                     {
@@ -1639,7 +1656,7 @@ namespace CompanionAI_v3.Planning.Planners
             float coneRange = ConeStarePlanner.KnownConeRange(unit);
             if (coneRange > 0f) keepInRange = Math.Min(keepInRange, coneRange);
 
-            var here = MeasureSafety(unit, currentNode, enemies);
+            var here = MeasureSafety(unit, currentNode, enemies, situation.PredictedMoves);
             float hereScore = SafetyScore(here, durable);
             Kingmaker.Pathfinding.CustomGridNodeBase bestNode = null;
             TileSafety there = here;
@@ -1667,7 +1684,7 @@ namespace CompanionAI_v3.Planning.Planners
                 if (nearest > keepInRange) continue;
 
                 checkedTiles++;
-                var safety = MeasureSafety(unit, node, enemies);
+                var safety = MeasureSafety(unit, node, enemies, situation.PredictedMoves);
                 float score = SafetyScore(safety, durable);
                 if (score > bestScore) { bestScore = score; bestNode = node; there = safety; }
             }
@@ -1677,12 +1694,17 @@ namespace CompanionAI_v3.Planning.Planners
             {
                 if (there.MeleeReach < here.MeleeReach && !durable) verdict = "fewer melee enemies can reach";
                 else if (bestScore >= hereScore + 15f)
-                    verdict = there.Hide > here.Hide ? "better cover" : "lower enemy-turn threat";
+                {
+                    if (there.RangedExposed < here.RangedExposed || there.RangedHalfCover < here.RangedHalfCover)
+                        verdict = "cover from more ranged enemies";
+                    else
+                        verdict = there.Hide > here.Hide ? "better cover" : "lower enemy-turn threat";
+                }
             }
 
             Log.Planning.Info($"[MovementPlanner] {unit.CharacterName}: End-of-turn reposition check ({checkedTiles} tiles) " +
-                $"here(melee={here.MeleeReach}, threat={here.TurnThreat:F1}, hide={here.Hide:F0}) " +
-                $"best(melee={there.MeleeReach}, threat={there.TurnThreat:F1}, hide={there.Hide:F0}" +
+                $"here(melee={here.MeleeReach}, ranged={here.RangedText}, threat={here.TurnThreat:F1}, hide={here.Hide:F0}) " +
+                $"best(melee={there.MeleeReach}, ranged={there.RangedText}, threat={there.TurnThreat:F1}, hide={there.Hide:F0}" +
                 (bestNode != null ? $", pos=({bestNode.Vector3Position.x:F1},{bestNode.Vector3Position.z:F1})" : "") +
                 $") → {(verdict ?? "stay")}");
 
@@ -1765,7 +1787,7 @@ namespace CompanionAI_v3.Planning.Planners
                 var tiles = mp > 0 ? MovementAPI.FindAllReachableTilesWithThreatsSync(unit, mp) : MovementAPI.FindAllReachableTilesWithThreatsSync(unit);
                 if (tiles == null || tiles.Count == 0) return destination;
 
-                var here = MeasureSafety(unit, destNode, enemies);
+                var here = MeasureSafety(unit, destNode, enemies, situation.PredictedMoves);
                 float destToTarget = CombatAPI.MetersToTiles(Vector3.Distance(destination, target.Position));
                 int destHittable = CombatAPI.CountHittableEnemiesFromPosition(unit, destNode, enemies, null, null);
                 bool avoidHazard = !CombatAPI.IsUnitInHazardZone(unit);
@@ -1783,16 +1805,21 @@ namespace CompanionAI_v3.Planning.Planners
                     if (avoidHazard && CombatAPI.IsPositionInHazardZone(pos, unit)) continue;
                     if (!BattlefieldGrid.Instance.ValidateNode(unit, node)) continue;
 
-                    var safety = MeasureSafety(unit, node, enemies);
+                    var safety = MeasureSafety(unit, node, enemies, situation.PredictedMoves);
                     if (safety.MeleeReach > here.MeleeReach) continue;
-                    if (safety.Hide < best.Hide + 15f) continue;
+                    // Better = covered from more of the ranged enemies who can shoot it next turn, or clearly
+                    // better general cover without losing any of that
+                    bool betterRanged = safety.RangedExposed < best.RangedExposed
+                        || (safety.RangedExposed == best.RangedExposed && safety.RangedHalfCover < best.RangedHalfCover);
+                    bool sameRanged = safety.RangedExposed == best.RangedExposed && safety.RangedHalfCover == best.RangedHalfCover;
+                    if (!betterRanged && !(sameRanged && safety.Hide >= best.Hide + 15f)) continue;
                     if (destHittable > 0 && CombatAPI.CountHittableEnemiesFromPosition(unit, node, enemies, null, null) == 0) continue;
                     best = safety;
                     bestNode = node;
                 }
 
                 if (bestNode == null) return destination;
-                Log.Planning.Info($"[{roleName}] Approach tile adjusted for cover: hide {here.Hide:F0} → {best.Hide:F0} " +
+                Log.Planning.Info($"[{roleName}] Approach tile adjusted for cover: ranged {here.RangedText} → {best.RangedText}, hide {here.Hide:F0} → {best.Hide:F0} " +
                     $"({bestNode.Vector3Position.x:F1},{bestNode.Vector3Position.z:F1})");
                 return bestNode.Vector3Position;
             }
@@ -1803,28 +1830,69 @@ namespace CompanionAI_v3.Planning.Planners
             }
         }
 
-        /// <summary>Safety ranking for end-of-turn tiles: melee reach first, then enemy-turn threat, then cover.</summary>
+        // End-of-turn cover against ranged enemies who can shoot the tile next turn
+        private const float RangedExposedPenalty = 40f;    // no cover from that enemy
+        private const float RangedHalfCoverPenalty = 10f;  // half cover from that enemy
+
+        /// <summary>
+        /// Safety ranking for end-of-turn tiles: melee reach first, then cover from the ranged enemies who can shoot
+        /// the tile next turn, then enemy-turn threat, then general cover.
+        /// </summary>
         private static float SafetyScore(TileSafety t, bool durable = false)
-            => -t.MeleeReach * (durable ? 25f : 100f) - t.TurnThreat * 15f + t.Hide;
+            => -t.MeleeReach * (durable ? 25f : 100f)
+               - t.RangedExposed * RangedExposedPenalty - t.RangedHalfCover * RangedHalfCoverPenalty
+               - t.TurnThreat * 15f + t.Hide;
 
         private struct TileSafety
         {
             public int MeleeReach;
             public float TurnThreat;
             public float Hide;
+            /// <summary>Ranged enemies able to shoot this tile next turn (from where they can move to).</summary>
+            public int RangedThreats;
+            public int RangedExposed;
+            public int RangedHalfCover;
+
+            public string RangedText => RangedThreats == 0 ? "none"
+                : $"{RangedThreats - RangedExposed}/{RangedThreats} covered ({RangedExposed} exposed, {RangedHalfCover} half)";
         }
 
-        private static TileSafety MeasureSafety(BaseUnitEntity unit, Kingmaker.Pathfinding.CustomGridNodeBase node, List<BaseUnitEntity> enemies)
+        private static readonly List<BaseUnitEntity> _rangedThreatBuffer = new List<BaseUnitEntity>();
+
+        private static TileSafety MeasureSafety(BaseUnitEntity unit, Kingmaker.Pathfinding.CustomGridNodeBase node, List<BaseUnitEntity> enemies,
+            PredictedEnemyMoves predictedMoves = null)
         {
             var pos = node.Vector3Position;
             var result = new TileSafety
             {
                 MeleeReach = CombatAPI.CountMeleeEnemiesThatCanReach(unit, pos, enemies)
             };
+            _rangedThreatBuffer.Clear();
             foreach (var enemy in enemies)
             {
                 if (enemy == null || enemy.LifeState.IsDead) continue;
-                result.TurnThreat += CombatAPI.GetEnemyTurnThreatScore(enemy, pos);
+                float threat = CombatAPI.GetEnemyTurnThreatScore(enemy, pos);
+                result.TurnThreat += threat;
+                if (threat > 0f && CombatAPI.HasRangedWeapon(enemy)) _rangedThreatBuffer.Add(enemy);
+            }
+
+            // Cover from each ranged threat, taking the worst case over the tiles that enemy can move to
+            if (_rangedThreatBuffer.Count > 0)
+            {
+                try
+                {
+                    var c = TileScorerPort.GetEnsuredCoverComponents(node, unit.SizeRect, _rangedThreatBuffer, predictedMoves);
+                    int n = _rangedThreatBuffer.Count;
+                    int anyCover = (int)Math.Round(c.AnyCoverRatio * n);
+                    int fullCover = (int)Math.Round(c.FullCoverRatio * n);
+                    result.RangedThreats = n;
+                    result.RangedExposed = n - anyCover;
+                    result.RangedHalfCover = anyCover - fullCover;
+                }
+                catch (Exception ex)
+                {
+                    Log.Planning.Error(ex, "[MovementPlanner] MeasureSafety ranged cover");
+                }
             }
             try
             {
@@ -1846,7 +1914,7 @@ namespace CompanionAI_v3.Planning.Planners
         /// ★ v3.18.16: 유닛의 실제 근접 무기 사거리 (타일)
         /// PrimaryHand의 IsMelee 무기 AttackRange 사용, 폴백 2f
         /// </summary>
-        private static float GetUnitMeleeRange(BaseUnitEntity unit)
+        internal static float GetUnitMeleeRange(BaseUnitEntity unit)
         {
             float meleeRange = 2f;  // 기본 근접 사거리
             try

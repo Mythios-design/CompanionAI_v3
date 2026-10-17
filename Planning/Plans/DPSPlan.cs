@@ -816,6 +816,15 @@ namespace CompanionAI_v3.Planning.Plans
                     }
                 }
 
+                // A Bladedancer's Blood Oath target comes before the shared target: the kill pays for the oath
+                var oathTarget = Planners.BladedancerTactics.GetOathTarget(situation);
+                if (oathTarget != null && situation.HittableEnemies.Contains(oathTarget)
+                    && !plannedTargetIds.Contains(oathTarget.UniqueId) && preferTarget != oathTarget)
+                {
+                    preferTarget = oathTarget;
+                    Log.Planning.Info($"[DPS] Phase 5: Attacking Blood Oath target {oathTarget.CharacterName}");
+                }
+
                 // ★ v3.74.0: 이번 턴에 마크한 적이 있으면 첫 공격 대상으로 강제
                 if (markedTarget != null && markedTarget.IsConscious &&
                     situation.HittableEnemies.Contains(markedTarget))

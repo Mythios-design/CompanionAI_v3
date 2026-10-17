@@ -465,6 +465,8 @@ namespace CompanionAI_v3.GameInterface
                     bool isAttack = ability.Weapon != null ||
                                    IsOffensiveAbility(ability);
                     if (!isAttack) continue;
+                    // Markers (e.g. Blood Oath) mark a target, they are not attacks: their own planner decides when to use them
+                    if (Data.AbilityDatabase.IsMarker(ability)) continue;
 
                     // ★ v3.8.86: GetEffectiveAPCost 사용 - bonus usage 공격도 감지
                     float cost = GetEffectiveAPCost(ability);
@@ -506,6 +508,8 @@ namespace CompanionAI_v3.GameInterface
                     bool isAttack = ability.Weapon != null ||
                                    IsOffensiveAbility(ability);
                     if (!isAttack) continue;
+                    // Markers (e.g. Blood Oath) mark a target, they are not attacks: their own planner decides when to use them
+                    if (Data.AbilityDatabase.IsMarker(ability)) continue;
 
                     // F4/F14: 0-AP 자해 능력은 HP 임계값 아래에서 제외 (관통 원인 1 — API 내재화).
                     if (IsSelfDamageBlockedAtHP(ability, hpPercent)) continue;
@@ -1218,14 +1222,41 @@ namespace CompanionAI_v3.GameInterface
             if (cv == null) return int.MaxValue;
             if (cv.ValueType == Kingmaker.UnitLogic.Mechanics.ContextValueType.Simple)
                 return cv.Value;
+            if (fact == null) return int.MaxValue;
+
+            // Remember each value per fact. Values that need an attack's target can't be worked out here: the game
+            // catches that itself, logs a full exception and returns 0, so without this it was logged on every check.
+            var perFact = _contextValueCache.GetOrCreateValue(fact);
+            if (perFact.TryGetValue(cv, out int cached)) return cached;
+
+            int result = int.MaxValue;
             try
             {
                 var ctx = fact.MaybeContext;
-                if (ctx != null) return cv.Calculate(ctx);
+                if (ctx != null) result = cv.Calculate(ctx);
             }
-            catch { }
-            return int.MaxValue;
+            catch (Exception ex)
+            {
+                Log.Engine.Error(ex, $"[CombatAPI] EvaluateContextValue failed for {fact.Blueprint?.name}");
+            }
+            perFact[cv] = result;
+            return result;
         }
+
+        private sealed class ReferenceComparer : IEqualityComparer<Kingmaker.UnitLogic.Mechanics.ContextValue>
+        {
+            public bool Equals(Kingmaker.UnitLogic.Mechanics.ContextValue a, Kingmaker.UnitLogic.Mechanics.ContextValue b) => ReferenceEquals(a, b);
+            public int GetHashCode(Kingmaker.UnitLogic.Mechanics.ContextValue v) => System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(v);
+        }
+
+        private sealed class ContextValueResults : Dictionary<Kingmaker.UnitLogic.Mechanics.ContextValue, int>
+        {
+            public ContextValueResults() : base(new ReferenceComparer()) { }
+        }
+
+        // Keyed weakly by fact, so entries go away with the facts (dead enemies, ended buffs)
+        private static readonly System.Runtime.CompilerServices.ConditionalWeakTable<EntityFact, ContextValueResults> _contextValueCache =
+            new System.Runtime.CompilerServices.ConditionalWeakTable<EntityFact, ContextValueResults>();
 
         /// <summary>
         /// ★ v3.94.0: WarhammerDamageModifier 계열 컴포넌트가 무조건 적용되는지 확인.

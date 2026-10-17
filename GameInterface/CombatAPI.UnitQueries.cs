@@ -856,68 +856,11 @@ namespace CompanionAI_v3.GameInterface
 
             try
             {
+                string key = ability.Blueprint?.AssetGuid?.ToString() ?? ability.Name;
                 foreach (var addEffect in ability.AdditionalEffects)
                 {
-                    if (addEffect?.OnHitActions?.Actions == null) continue;
-
-                    foreach (var action in addEffect.OnHitActions.Actions)
-                    {
-                        var castSpell = action as ContextActionCastSpell;
-                        if (castSpell?.Spell == null) continue;
-
-                        // 1. AbilityDeliverChain (Psyker ChainLightning 류)
-                        var chain = castSpell.Spell.GetComponent<AbilityDeliverChain>();
-                        if (chain != null)
-                        {
-                            radius = chain.Radius;
-                            targetType = chain.TargetType;
-                            try
-                            {
-                                int countVal = chain.TargetsCount?.Value ?? 0;
-                                maxChain = countVal > 0 ? countVal : 4;
-                            }
-                            catch { maxChain = 4; }
-
-                            if (Main.IsDebugEnabled)
-                            {
-                                string key = ability.Blueprint?.AssetGuid?.ToString() ?? ability.Name;
-                                if (_loggedChainAbilities.Add(key))
-                                    Log.Engine.Debug($"[ChainDetect] DeliverChain: {ability.Name} → {castSpell.Spell.name} (radius={radius}, type={targetType}, max={maxChain})");
-                            }
-                            return true;
-                        }
-
-                        // 2. v3.117.33: AbilityTargetsInPatternTrail (Arc 무기 류 — 패턴 안 모든 타겟)
-                        var trail = castSpell.Spell.GetComponent<AbilityTargetsInPatternTrail>();
-                        if (trail != null)
-                        {
-                            int trailRadius = 0;
-                            try { trailRadius = trail.Pattern?.Radius ?? 0; } catch { }
-                            radius = trailRadius > 0 ? trailRadius : 5;
-                            targetType = trail.Targets;
-                            maxChain = 99;
-
-                            if (Main.IsDebugEnabled)
-                            {
-                                string key = ability.Blueprint?.AssetGuid?.ToString() ?? ability.Name;
-                                if (_loggedChainAbilities.Add(key))
-                                    Log.Engine.Debug($"[ChainDetect] PatternTrail: {ability.Name} → {castSpell.Spell.name} (radius={radius}, type={targetType})");
-                            }
-                            return true;
-                        }
-
-                        // 검출 실패 — *새 spell* 만 1회 진단 (회귀/신규 무기 식별용)
-                        if (Main.IsDebugEnabled)
-                        {
-                            string spellKey = castSpell.Spell.AssetGuid?.ToString() ?? castSpell.Spell.name;
-                            if (_loggedNonChainSpells.Add(spellKey))
-                            {
-                                var spellComps = castSpell.Spell.ComponentsArray;
-                                string compNames = spellComps == null ? "(null)" : string.Join(",", spellComps.Select(c => c?.GetType().Name ?? "null"));
-                                Log.Engine.Debug($"[ChainDetect] non-chain spell '{castSpell.Spell.name}' components: [{compNames}]");
-                            }
-                        }
-                    }
+                    if (TryGetOnHitChain(addEffect, key, ability.Name, out radius, out targetType, out maxChain))
+                        return true;
                 }
             }
             catch (Exception ex)
@@ -925,6 +868,75 @@ namespace CompanionAI_v3.GameInterface
                 if (Main.IsDebugEnabled) Log.Engine.Warn($"[CombatAPI] TryGetWeaponOnHitChain failed for {ability?.Name}: {ex.Message}");
             }
 
+            radius = 0;
+            targetType = TargetType.Enemy;
+            maxChain = 0;
+            return false;
+        }
+
+        /// <summary>
+        /// Chain trigger in one on-hit effect (a weapon's or a weapon attack's OnHitActions). Works from blueprints,
+        /// so it can also read weapons in the set that isn't in hand.
+        /// </summary>
+        public static bool TryGetOnHitChain(
+            Kingmaker.UnitLogic.Abilities.Blueprints.BlueprintAbilityAdditionalEffect effect, string logKey, string logName,
+            out int radius, out TargetType targetType, out int maxChain)
+        {
+            radius = 0;
+            targetType = TargetType.Enemy;
+            maxChain = 0;
+            if (effect?.OnHitActions?.Actions == null) return false;
+
+            foreach (var action in effect.OnHitActions.Actions)
+            {
+                var castSpell = action as ContextActionCastSpell;
+                if (castSpell?.Spell == null) continue;
+
+                // 1. AbilityDeliverChain (Psyker ChainLightning 류)
+                var chain = castSpell.Spell.GetComponent<AbilityDeliverChain>();
+                if (chain != null)
+                {
+                    radius = chain.Radius;
+                    targetType = chain.TargetType;
+                    try
+                    {
+                        int countVal = chain.TargetsCount?.Value ?? 0;
+                        maxChain = countVal > 0 ? countVal : 4;
+                    }
+                    catch { maxChain = 4; }
+
+                    if (Main.IsDebugEnabled && _loggedChainAbilities.Add(logKey ?? ""))
+                        Log.Engine.Debug($"[ChainDetect] DeliverChain: {logName} → {castSpell.Spell.name} (radius={radius}, type={targetType}, max={maxChain})");
+                    return true;
+                }
+
+                // 2. v3.117.33: AbilityTargetsInPatternTrail (Arc 무기 류 — 패턴 안 모든 타겟)
+                var trail = castSpell.Spell.GetComponent<AbilityTargetsInPatternTrail>();
+                if (trail != null)
+                {
+                    int trailRadius = 0;
+                    try { trailRadius = trail.Pattern?.Radius ?? 0; } catch { }
+                    radius = trailRadius > 0 ? trailRadius : 5;
+                    targetType = trail.Targets;
+                    maxChain = 99;
+
+                    if (Main.IsDebugEnabled && _loggedChainAbilities.Add(logKey ?? ""))
+                        Log.Engine.Debug($"[ChainDetect] PatternTrail: {logName} → {castSpell.Spell.name} (radius={radius}, type={targetType})");
+                    return true;
+                }
+
+                // 검출 실패 — *새 spell* 만 1회 진단 (회귀/신규 무기 식별용)
+                if (Main.IsDebugEnabled)
+                {
+                    string spellKey = castSpell.Spell.AssetGuid?.ToString() ?? castSpell.Spell.name;
+                    if (_loggedNonChainSpells.Add(spellKey))
+                    {
+                        var spellComps = castSpell.Spell.ComponentsArray;
+                        string compNames = spellComps == null ? "(null)" : string.Join(",", spellComps.Select(c => c?.GetType().Name ?? "null"));
+                        Log.Engine.Debug($"[ChainDetect] non-chain spell '{castSpell.Spell.name}' components: [{compNames}]");
+                    }
+                }
+            }
             return false;
         }
 

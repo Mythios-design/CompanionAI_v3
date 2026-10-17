@@ -487,6 +487,14 @@ namespace CompanionAI_v3.Planning.Plans
                 return CreatePlanWithSnapshot(actions, TurnPriority.DirectAttack, $"{RoleName} cone attack", situation);
             }
 
+            // Phase 1.4: Bladedancer — Blood Oath on a reachable, killable enemy, or a Death From Above strike
+            var bladedancerActions = Planners.BladedancerTactics.PlanOpening(situation, ref remainingAP, RoleName);
+            if (bladedancerActions != null)
+            {
+                actions.AddRange(bladedancerActions);
+                return CreatePlanWithSnapshot(actions, TurnPriority.DirectAttack, $"{RoleName} bladedancer opening", situation);
+            }
+
             // Phase 1.5: Reload (early return 없음 — 이후 Phase 계속 진행)
             var reloadAction = PlanReload(situation, ref remainingAP);
             if (reloadAction != null)

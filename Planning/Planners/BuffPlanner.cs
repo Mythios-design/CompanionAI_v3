@@ -928,7 +928,7 @@ namespace CompanionAI_v3.Planning.Planners
                 float distToTarget = CombatCache.GetDistanceInTiles(situation.Unit, target);
                 float weaponRange = situation.PrimaryAttack != null
                     ? CombatAPI.GetAbilityRangeInTiles(situation.PrimaryAttack) : 1f;
-                float moveRange = CombatAPI.GetCurrentMP(situation.Unit) / CombatAPI.GridCellSize;
+                float moveRange = CombatAPI.GetCurrentMP(situation.Unit);  // MP is already in tiles
                 float reachRange = weaponRange + moveRange;
 
                 if (distToTarget > reachRange)
@@ -943,6 +943,9 @@ namespace CompanionAI_v3.Planning.Planners
 
             foreach (var marker in markers)
             {
+                // Blood Oath has its own target rules (BladedancerTactics, Phase 1.4)
+                if (BladedancerTactics.IsBloodOath(marker)) continue;
+
                 float cost = CombatAPI.GetAbilityAPCost(marker);
                 if (cost > remainingAP) continue;
 

@@ -590,14 +590,23 @@ namespace CompanionAI_v3.GameInterface
                         hittableFromLos++;  // ★ v3.8.78: LOS 있으면 hittable 카운트
                     }
 
-                    // coverType 기반 fire efficiency 누적 (LOS 대칭 가정 — 벽 기반 cover는 양방향 동일)
+                    // Fire efficiency uses the enemy's cover from this tile. Cover isn't symmetric: the line above
+                    // is our cover from the enemy (walls next to us), so ask again from this tile to the enemy.
+                    // No line of sight one way means none the other, so skip the second lookup then.
                     float fireEff = 0f;
-                    switch (coverType)
+                    if (coverType != LosCalculations.CoverType.Invisible)
                     {
-                        case LosCalculations.CoverType.None:      fireEff = 1.0f;    break;
-                        case LosCalculations.CoverType.Half:      fireEff = 0.02f;   break;
-                        case LosCalculations.CoverType.Full:      fireEff = 0.0004f; break;
-                        case LosCalculations.CoverType.Invisible: fireEff = 0f;      break;
+                        long losStart2 = Stopwatch.GetTimestamp();
+                        var enemyCover = LosCalculations.GetWarhammerLos(node, unit.SizeRect, enemyNode, enemy.SizeRect).CoverType;
+                        _perfLosTicks += Stopwatch.GetTimestamp() - losStart2;
+                        _perfLosCount++;
+                        switch (enemyCover)
+                        {
+                            case LosCalculations.CoverType.None:      fireEff = 1.0f;    break;
+                            case LosCalculations.CoverType.Half:      fireEff = 0.02f;   break;
+                            case LosCalculations.CoverType.Full:      fireEff = 0.0004f; break;
+                            case LosCalculations.CoverType.Invisible: fireEff = 0f;      break;
+                        }
                     }
                     fireEfficiencySum += fireEff;
 

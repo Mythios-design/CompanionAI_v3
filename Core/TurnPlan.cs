@@ -234,6 +234,14 @@ namespace CompanionAI_v3.Core
                 }
             }
 
+            // 1-3b2. A point-target action aimed at one enemy (a jump to it): that enemy went down first
+            if (nextAction.IntendedTarget != null
+                && (nextAction.IntendedTarget.LifeState.IsDead || !nextAction.IntendedTarget.IsConscious))
+            {
+                Log.Engine.Info($"[TurnPlan] Replan needed: {nextAction.Ability?.Name} was aimed at {nextAction.IntendedTarget.CharacterName}, who is down");
+                return true;
+            }
+
             // 1-3c. AllTargets(차지 라인) 공격의 경로 점유 재검증
             //   AerialRush 등 P1→P2 멀티타겟 공격은 계획 시점 라인을 동결 — 선행 액션의 킬/넉백이나
             //   적 이동으로 라인 상 적이 사라지면 빈 라인에 시전됨. 위 1-3b는 AllTargets 제외라 무검증.
