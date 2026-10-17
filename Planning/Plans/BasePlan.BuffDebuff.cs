@@ -290,12 +290,8 @@ namespace CompanionAI_v3.Planning.Plans
                         continue;
                     }
 
-                    // ★ v3.7.87: 턴 전달 능력은 이미 행동한 유닛에게 쓰면 낭비
-                    if (isTurnGrant && TeamBlackboard.Instance.HasActedThisRound(target))
-                    {
-                        if (Main.IsDebugEnabled) Log.Planning.Debug($"[{RoleName}] Skip {buff.Name} -> {target.CharacterName}: already acted this round");
-                        continue;
-                    }
+                    // An ally who already acted this round can still use the extra turn (it brings its own AP), so
+                    // that's no reason to skip. Whether the grant is worth it is TurnGrantPolicy's call below.
 
                     // ★ v3.8.16: 턴 전달 능력이 이미 이 턴에 계획된 대상에게 중복 사용 방지
                     // 같은 계획 단계에서 같은 대상에게 여러 번 쳐부숴라 계획 방지
