@@ -363,6 +363,7 @@ namespace CompanionAI_v3.Planning.Plans
                                     atkAction.GroupTag = killGroupTag;  // ★ v3.8.86
                                     atkAction.FailurePolicy = GroupFailurePolicy.SkipRemainingInGroup;
                                     actions.Add(atkAction);
+                                    ExcludeSpentWeaponAttacks(atkAction, situation, plannedAbilityGuids);
                                 }
                                 remainingAP -= apCost;
                             }
@@ -394,6 +395,7 @@ namespace CompanionAI_v3.Planning.Plans
                     if (finisherAction != null)
                     {
                         actions.Add(finisherAction);
+                        ExcludeSpentWeaponAttacks(finisherAction, situation, plannedAbilityGuids);
                     }
                 }
             }
@@ -863,6 +865,7 @@ namespace CompanionAI_v3.Planning.Plans
                 if (attackAction == null) break;
 
                 actions.Add(attackAction);
+                ExcludeSpentWeaponAttacks(attackAction, situation, plannedAbilityGuids);
                 didPlanAttack = true;
                 attacksPlanned++;
 

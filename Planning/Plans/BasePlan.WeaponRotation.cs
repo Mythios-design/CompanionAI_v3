@@ -174,12 +174,14 @@ namespace CompanionAI_v3.Planning.Plans
             // Case 4: the current set can't hit anyone (out of range, no line of sight, or blocked by friendly-fire
             // rules such as an arc weapon's chain) but the other set can, from here or after moving.
             // e.g. Arc Rifle blocked by allies next to the target -> Sniper Rifle.
-            if (!situation.HasHittableEnemies)
+            // Not worth asking once weapon attacks are spent: IsSwitchWorthIt would turn the switch down anyway.
+            if (!situation.HasHittableEnemies
+                && (situation.HasWeaponSwitchBonus || !WeaponSetForecast.WeaponAttacksSpent(situation.Unit)))
             {
                 var forecast = WeaponSetForecast.Evaluate(situation, altIdx);
                 if (forecast.CanAttackHere || (situation.CurrentMP > 0 && forecast.Unusable == null && forecast.ReachableAfterMove > 0))
                 {
-                    Log.Planning.Info($"[{RoleName}] Weapon choice: current set hits 0, {forecast.Summary()} -> switch");
+                    Log.Planning.Info($"[{RoleName}] Weapon choice: current set hits 0, {forecast.Summary()} -> worth switching, final check next");
                     return true;
                 }
             }

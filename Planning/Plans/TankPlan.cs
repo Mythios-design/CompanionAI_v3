@@ -539,6 +539,7 @@ namespace CompanionAI_v3.Planning.Plans
                 if (attackAction == null) break;
 
                 actions.Add(attackAction);
+                ExcludeSpentWeaponAttacks(attackAction, situation, plannedAbilityGuids);
                 didPlanAttack = true;
                 attacksPlanned++;
 

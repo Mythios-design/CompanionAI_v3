@@ -24,9 +24,39 @@ namespace CompanionAI_v3.Planning.Plans
         protected static void ExcludePlannedAbilityGuid(PlannedAction action, Situation situation, HashSet<string> excludeAbilityGuids)
         {
             if (action?.Ability == null || excludeAbilityGuids == null) return;
+            ExcludeSpentWeaponAttacks(action, situation, excludeAbilityGuids);
             if (situation.HittableEnemies.Count <= 1) return;
             string guid = action.Ability.Blueprint?.AssetGuid?.ToString();
             if (!string.IsNullOrEmpty(guid)) excludeAbilityGuids.Add(guid);
+        }
+
+        /// <summary>
+        /// The game allows one attack per round from the weapon attack group (Single Shot, Burst Fire and the
+        /// like): using one puts the others on cooldown. Once the plan has one, the rest of the group is left out
+        /// of later attack picks, except attacks with a bonus usage waiting (Run and Gun and similar), which
+        /// skip the cooldown. If the planned attack is itself the bonus usage, the normal attack is still there.
+        /// More attacks granted mid-turn are picked up by the replan that follows.
+        /// </summary>
+        protected static void ExcludeSpentWeaponAttacks(PlannedAction action, Situation situation, HashSet<string> excludeAbilityGuids)
+        {
+            var ability = action?.Ability;
+            if (ability == null || excludeAbilityGuids == null || situation == null) return;
+            if (!AbilityPolicy.EndsWeaponAttacks(ability) || CombatAPI.HasBonusUsage(ability)) return;
+
+            var excluded = new List<string>();
+            foreach (var list in new[] { situation.AvailableAttacks, situation.AvailableAoEAttacks })
+            {
+                if (list == null) continue;
+                foreach (var a in list)
+                {
+                    if (a == null || !AbilityPolicy.EndsWeaponAttacks(a) || CombatAPI.HasBonusUsage(a)) continue;
+                    string guid = a.Blueprint?.AssetGuid?.ToString();
+                    if (string.IsNullOrEmpty(guid) || !excludeAbilityGuids.Add(guid)) continue;
+                    excluded.Add(a.Name);
+                }
+            }
+            if (excluded.Count > 0 && Main.IsDebugEnabled)
+                Log.Planning.Debug($"[Plan] {situation.Unit?.CharacterName}: {ability.Name} planned, weapon attacks spent for the turn - leaving out {string.Join(", ", excluded)}");
         }
 
         /// <summary>
