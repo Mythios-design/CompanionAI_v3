@@ -49,13 +49,24 @@ namespace CompanionAI_v3.GameInterface
                 WarhammerPathAiCell goal = default;
                 BaseUnitEntity seen = null;
                 bool found = false;
+                // For the log: how much was searched, and the closest any tile got to an enemy
+                int checkedTiles = 0, inRangeTiles = 0;
+                float furthestWalk = 0f, closestDist = float.MaxValue;
+                Vector3 closestTile = Vector3.zero;
+                BaseUnitEntity closestEnemy = null;
                 foreach (var cell in far.Values.OrderBy(c => c.Length))
                 {
                     if (!cell.IsCanStand || !(cell.Node is CustomGridNodeBase node)) continue;
                     if (avoidHazard && CombatAPI.IsPositionInHazardZone(node.Vector3Position, unit)) continue;
+                    checkedTiles++;
+                    if (cell.Length > furthestWalk) furthestWalk = cell.Length;
+                    bool anyInRange = false;
                     foreach (var enemy in enemies)
                     {
-                        if (CombatAPI.GetDistanceInTiles(node.Vector3Position, enemy) > range) continue;
+                        float dist = CombatAPI.GetDistanceInTiles(node.Vector3Position, enemy);
+                        if (dist < closestDist) { closestDist = dist; closestTile = node.Vector3Position; closestEnemy = enemy; }
+                        if (dist > range) continue;
+                        anyInRange = true;
                         var los = LosCalculations.GetWarhammerLos(node, unit.SizeRect, enemy.CurrentUnwalkableNode, enemy.SizeRect);
                         if (los.CoverType == LosCalculations.CoverType.Invisible) continue;
                         goal = cell;
@@ -63,11 +74,14 @@ namespace CompanionAI_v3.GameInterface
                         found = true;
                         break;
                     }
+                    if (anyInRange) inRangeTiles++;
                     if (found) break;
                 }
                 if (!found)
                 {
-                    Log.Engine.Info($"[LoSApproach] {unit.CharacterName}: no tile within two turns ({twoTurns:F0} MP) can see an enemy");
+                    Log.Engine.Info($"[LoSApproach] {unit.CharacterName}: no tile within two turns ({twoTurns:F0} MP) can see an enemy - " +
+                        $"{checkedTiles} of {far.Count} tiles checked (furthest {furthestWalk:F0} MP), {inRangeTiles} within weapon range {range:F0}; " +
+                        $"closest tile ({closestTile.x:F1},{closestTile.y:F1},{closestTile.z:F1}) is {closestDist:F1} tiles from {closestEnemy?.CharacterName ?? "no enemy"}");
                     return null;
                 }
 
@@ -89,7 +103,7 @@ namespace CompanionAI_v3.GameInterface
                 if (moved < MinStepTiles) return null;
 
                 bool arrives = step.Node == goal.Node;
-                Log.Engine.Info($"[LoSApproach] {unit.CharacterName}: no line of sight from any reachable tile - heading for " +
+                Log.Engine.Info($"[LoSApproach] {unit.CharacterName}: no line of sight from any reachable tile ({checkedTiles} of {far.Count} tiles checked) - heading for " +
                     $"({goal.Position.x:F1},{goal.Position.z:F1}), sees {seen.CharacterName}, {goal.Length:F0} MP to walk" +
                     (arrives ? " (reached this turn)" : $", stopping at ({stepNode.Vector3Position.x:F1},{stepNode.Vector3Position.z:F1}) this turn"));
 

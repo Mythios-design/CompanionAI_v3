@@ -466,6 +466,15 @@ namespace CompanionAI_v3.Planning.Planners
                     return null;
                 }
 
+                // A Bladedancer's Blood Oath target within melee reach of the destination beats the nearest enemy
+                var oathTarget = BladedancerTactics.GetOathTarget(situation);
+                if (oathTarget != null && oathTarget != effectiveTarget
+                    && CombatAPI.GetDistanceInTiles(moveDestination.Value, oathTarget) <= MovementPlanner.GetUnitMeleeRange(situation.Unit) + 0.5f)
+                {
+                    Log.Planning.Info($"[{roleName}] PlanPostMoveAttack: attacking Blood Oath target {oathTarget.CharacterName} instead of nearest {effectiveTarget.CharacterName}");
+                    effectiveTarget = oathTarget;
+                }
+
                 if (effectiveTarget != target)
                 {
                     if (Main.IsDebugEnabled) Log.Planning.Debug($"[{roleName}] PlanPostMoveAttack: Target changed from {target?.CharacterName} to {effectiveTarget.CharacterName} based on move destination");
