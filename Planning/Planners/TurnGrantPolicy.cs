@@ -77,17 +77,22 @@ namespace CompanionAI_v3.Planning.Planners
             ap = null;
             mp = null;
             detail = "no turn grant action";
-            var actions = BlueprintCache.GetCachedRunAction(grant.Blueprint)?.Actions?.Actions;
-            if (actions == null) return;
-            foreach (var action in actions)
+            var turn = TurnGrantDetector.Find(grant.Blueprint);
+            if (turn != null)
             {
-                if (!(action is ContextActionStartAdditionalTurn turn)) continue;
                 var apValue = GrantedAPField?.GetValue(turn) as ContextValue;
                 var mpValue = GrantedMPField?.GetValue(turn) as ContextValue;
                 if (apValue != null && apValue.IsValueSimple) ap = apValue.Value;
                 if (mpValue != null && mpValue.IsValueSimple) mp = mpValue.Value;
                 detail = $"AP={(ap?.ToString() ?? apValue?.ValueType.ToString() ?? "missing")}, MP={(mp?.ToString() ?? mpValue?.ValueType.ToString() ?? "missing")}";
-                return;
+            }
+
+            // Fall back to the known values for abilities whose extra-turn action can't be found or read
+            if ((ap == null || mp == null) && TurnGrantDetector.TryGetKnown(grant.Blueprint, out int knownAP, out int knownMP))
+            {
+                ap = ap ?? knownAP;
+                mp = mp ?? knownMP;
+                detail = $"AP={ap}, MP={mp} (known values)";
             }
         }
 

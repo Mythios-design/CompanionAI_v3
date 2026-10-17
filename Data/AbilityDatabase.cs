@@ -1384,33 +1384,8 @@ namespace CompanionAI_v3.Data
         /// </summary>
         public static bool IsTurnGrantAbility(AbilityData ability)
         {
-            if (ability == null) return false;
-
-            try
-            {
-                var bp = ability.Blueprint;
-                if (bp == null) return false;
-
-                // ★ v3.8.62: BlueprintCache 캐시 사용 (GetComponent O(n) → O(1))
-                var runAction = BlueprintCache.GetCachedRunAction(bp);
-                if (runAction?.Actions?.Actions == null) return false;
-
-                foreach (var action in runAction.Actions.Actions)
-                {
-                    // ★ v3.8.59: 타입 안전 체크 (string 매칭 제거)
-                    if (action is ContextActionStartAdditionalTurn)
-                    {
-                        Log.Persistence.Debug($"[AbilityDB] IsTurnGrantAbility: {ability.Name} has ContextActionStartAdditionalTurn");
-                        return true;
-                    }
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Persistence.Error(ex, $"[AbilityDB] IsTurnGrantAbility error for {ability.Name}");
-            }
-
-            return false;
+            // Searches nested action lists too (variants and talents can wrap the extra-turn action)
+            return ability?.Blueprint != null && TurnGrantDetector.IsTurnGrant(ability.Blueprint);
         }
 
         /// <summary>

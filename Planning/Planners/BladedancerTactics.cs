@@ -20,7 +20,8 @@ namespace CompanionAI_v3.Planning.Planners
     /// Bladedancer rules:
     ///  - Blood Oath only goes on an enemy the Bladedancer can reach this turn (walking, counting the MP that spending
     ///    wounds gives, or with one Death From Above jump) and can probably kill. The kill is what pays: wounds back,
-    ///    +1 AP and an extra attack. Once sworn, that enemy is her target until it dies.
+    ///    +1 AP and an extra attack (once per round). Once sworn, that enemy is her target until it dies. After the
+    ///    round's reward, extra oaths (once per enemy) go only on hard-to-hit enemies she's about to attack.
     ///  - Death From Above is a free attack when the landing is next to enough enemies. As a plain gap closer it is
     ///    only used with more than <see cref="GapCloserReserve"/> uses left, or to reach the oath target.
     /// The MP bonus from wound spending (a common Bladedancer talent) is learned in the fight: the first time she
@@ -48,17 +49,45 @@ namespace CompanionAI_v3.Planning.Planners
         private const float AdjacentTiles = 1.5f;
         private const int MaxLandingChecks = 12;
 
+        /// <summary>After the round's kill reward, extra oaths only go on enemies this hard to hit (dodge or parry %).</summary>
+        public const int ExtraOathMinAvoidance = 20;
+
         // Per combat
-        private static readonly Dictionary<string, string> _oathTargets = new Dictionary<string, string>();
+        // Enemies sworn by each Bladedancer, in order: the first living one is her main target
+        private static readonly Dictionary<string, List<string>> _oathTargets = new Dictionary<string, List<string>>();
+        // Enemies sworn this round (Blood Oath can be used several times a turn, once per enemy)
+        private static readonly Dictionary<string, (int round, HashSet<string> ids)> _swornThisRound = new Dictionary<string, (int, HashSet<string>)>();
+        // Round in which the oath kill reward (+1 AP and an extra attack, once per round) was earned
+        private static readonly Dictionary<string, int> _rewardRound = new Dictionary<string, int>();
+        private static readonly Dictionary<string, string> _lastSworn = new Dictionary<string, string>();
         private static readonly Dictionary<string, float> _woundMPBonus = new Dictionary<string, float>();
         private static readonly Dictionary<string, float> _mpBeforeWoundSpend = new Dictionary<string, float>();
 
         public static void Reset()
         {
             _oathTargets.Clear();
+            _swornThisRound.Clear();
+            _rewardRound.Clear();
+            _lastSworn.Clear();
             _woundMPBonus.Clear();
             _mpBeforeWoundSpend.Clear();
         }
+
+        private static int CurrentRound => Kingmaker.Game.Instance?.TurnController?.CombatRound ?? 0;
+
+        private static HashSet<string> SwornThisRound(string casterId)
+        {
+            int round = CurrentRound;
+            if (!_swornThisRound.TryGetValue(casterId, out var entry) || entry.round != round)
+            {
+                entry = (round, new HashSet<string>());
+                _swornThisRound[casterId] = entry;
+            }
+            return entry.ids;
+        }
+
+        private static bool RewardClaimedThisRound(string casterId)
+            => _rewardRound.TryGetValue(casterId, out int round) && round == CurrentRound;
 
         public static bool IsBloodOath(AbilityData ability) => Guid(ability) == BLOOD_OATH;
 
@@ -92,8 +121,12 @@ namespace CompanionAI_v3.Planning.Planners
                 var target = action.Target?.Entity as BaseUnitEntity;
                 if (IsBloodOath(ability) && target != null)
                 {
-                    _oathTargets[unit.UniqueId] = target.UniqueId;
-                    Log.Planning.Info($"[Bladedancer] {unit.CharacterName}: Blood Oath sworn on {target.CharacterName}");
+                    if (!_oathTargets.TryGetValue(unit.UniqueId, out var list))
+                        _oathTargets[unit.UniqueId] = list = new List<string>();
+                    if (!list.Contains(target.UniqueId)) list.Add(target.UniqueId);
+                    SwornThisRound(unit.UniqueId).Add(target.UniqueId);
+                    _lastSworn[unit.UniqueId] = target.UniqueId;
+                    Log.Planning.Info($"[Bladedancer] {unit.CharacterName}: Blood Oath sworn on {target.CharacterName} ({list.Count} sworn)");
                 }
             }
             catch (Exception ex)
@@ -107,8 +140,11 @@ namespace CompanionAI_v3.Planning.Planners
         {
             if (unit == null) return;
             _mpBeforeWoundSpend.Remove(unit.UniqueId);
-            if (IsBloodOath(ability) && _oathTargets.Remove(unit.UniqueId))
-                Log.Planning.Info($"[Bladedancer] {unit.CharacterName}: Blood Oath refused, oath target cleared");
+            if (!IsBloodOath(ability) || !_lastSworn.TryGetValue(unit.UniqueId, out string id)) return;
+            _lastSworn.Remove(unit.UniqueId);
+            if (_oathTargets.TryGetValue(unit.UniqueId, out var list)) list.Remove(id);
+            SwornThisRound(unit.UniqueId).Remove(id);
+            Log.Planning.Info($"[Bladedancer] {unit.CharacterName}: Blood Oath refused, that oath target cleared");
         }
 
         /// <summary>After a wound spend, the next analysis sees the MP it gave; remember the bonus for this combat.</summary>
@@ -129,19 +165,52 @@ namespace CompanionAI_v3.Planning.Planners
         private static float WoundMPBonus(BaseUnitEntity unit)
             => unit != null && _woundMPBonus.TryGetValue(unit.UniqueId, out float mp) ? mp : 0f;
 
-        /// <summary>The living enemy this unit has sworn Blood Oath on, or null.</summary>
+        /// <summary>Her main oath target: the first living enemy she has sworn on, or null.</summary>
         public static BaseUnitEntity GetOathTarget(Situation situation)
         {
-            var unit = situation?.Unit;
-            if (unit == null || !_oathTargets.TryGetValue(unit.UniqueId, out string id)) return null;
-            foreach (var enemy in situation.Enemies)
-            {
-                if (enemy != null && enemy.UniqueId == id && enemy.IsConscious && !enemy.LifeState.IsDead)
-                    return enemy;
-            }
-            _oathTargets.Remove(unit.UniqueId);
-            return null;
+            var living = GetOathTargets(situation);
+            return living.Count > 0 ? living[0] : null;
         }
+
+        /// <summary>
+        /// Living enemies she has sworn on, in the order sworn. Sworn enemies who are gone are dropped; one going down
+        /// during her own turn after she attacked counts as the round's kill reward.
+        /// </summary>
+        public static List<BaseUnitEntity> GetOathTargets(Situation situation)
+        {
+            var result = new List<BaseUnitEntity>();
+            var unit = situation?.Unit;
+            if (unit == null || !_oathTargets.TryGetValue(unit.UniqueId, out var ids) || ids.Count == 0) return result;
+
+            for (int i = ids.Count - 1; i >= 0; i--)
+            {
+                BaseUnitEntity found = null;
+                foreach (var enemy in situation.Enemies)
+                {
+                    if (enemy != null && enemy.UniqueId == ids[i] && enemy.IsConscious && !enemy.LifeState.IsDead) { found = enemy; break; }
+                }
+                if (found != null) continue;
+
+                ids.RemoveAt(i);
+                // Only an approximation of who killed it: the game gives the reward to her killing blow
+                var turnState = TurnOrchestrator.Instance?.GetCurrentTurnState();
+                if (turnState?.Unit == unit && turnState.HasAttackedThisTurn && !RewardClaimedThisRound(unit.UniqueId))
+                {
+                    _rewardRound[unit.UniqueId] = CurrentRound;
+                    Log.Planning.Info($"[Bladedancer] {unit.CharacterName}: oath target down this turn, kill reward taken for the round");
+                }
+            }
+            foreach (var id in ids)
+            {
+                foreach (var enemy in situation.Enemies)
+                    if (enemy != null && enemy.UniqueId == id) { result.Add(enemy); break; }
+            }
+            return result;
+        }
+
+        /// <summary>Already sworn on this round, or still carrying her oath: Blood Oath goes on each enemy once.</summary>
+        private static bool IsAlreadySworn(Situation situation, AbilityData oath, BaseUnitEntity enemy)
+            => SwornThisRound(situation.Unit.UniqueId).Contains(enemy.UniqueId) || AllyStateCache.HasBuff(enemy, oath);
 
         #endregion
 
@@ -169,10 +238,16 @@ namespace CompanionAI_v3.Planning.Planners
             return null;
         }
 
+        /// <summary>
+        /// Blood Oath can go on several enemies a turn, once each. The kill reward comes once per round, so:
+        ///  - Reward not yet taken: one oath at a time, on an enemy she can reach and probably kill. While that enemy
+        ///    lives, no other oath.
+        ///  - Reward taken: extra oaths only on the enemy she's about to hit, when its dodge or parry is at least
+        ///    <see cref="ExtraOathMinAvoidance"/>%, since the oath's attack can't be dodged or parried.
+        /// Each oath costs wounds; the 70% HP gate is applied by the analyzer.
+        /// </summary>
         private static PlannedAction PlanBloodOath(Situation situation, ref float remainingAP, string roleName)
         {
-            if (GetOathTarget(situation) != null) return null;
-
             AbilityData oath = null;
             foreach (var marker in situation.AvailableMarkers)
                 if (IsBloodOath(marker)) { oath = marker; break; }
@@ -181,7 +256,18 @@ namespace CompanionAI_v3.Planning.Planners
             float cost = CombatAPI.GetAbilityAPCost(oath);
             if (cost > remainingAP) return null;
 
-            var target = ChooseOathTarget(situation, cost, out string why);
+            var living = GetOathTargets(situation);
+            BaseUnitEntity target;
+            string why;
+            if (!RewardClaimedThisRound(situation.Unit.UniqueId))
+            {
+                if (living.Count > 0) return null;  // the sworn enemy still needs killing first
+                target = ChooseOathTarget(situation, oath, cost, out why);
+            }
+            else
+            {
+                target = ChooseExtraOathTarget(situation, oath, out why);
+            }
             if (target == null)
             {
                 Log.Planning.Info($"[{roleName}] Blood Oath held: {why}");
@@ -198,8 +284,48 @@ namespace CompanionAI_v3.Planning.Planners
             return PlannedAction.Debuff(oath, target, $"Blood Oath on {target.CharacterName}", cost);
         }
 
+        /// <summary>
+        /// After the round's reward: the enemy she's about to hit (one she can hit now, best target first), if it's
+        /// hard enough to hit that "can't be dodged or parried" is worth the wounds.
+        /// </summary>
+        private static BaseUnitEntity ChooseExtraOathTarget(Situation situation, AbilityData oath, out string why)
+        {
+            var unit = situation.Unit;
+            AbilityData melee = null;
+            foreach (var attack in situation.AvailableAttacks)
+            {
+                if (attack?.Weapon != null && attack.IsMelee && !AbilityDatabase.IsGapCloser(attack)) { melee = attack; break; }
+            }
+            if (melee == null || situation.HittableEnemies == null || situation.HittableEnemies.Count == 0)
+            {
+                why = "kill reward already taken this round and no enemy in reach to attack";
+                return null;
+            }
+
+            var candidates = new List<BaseUnitEntity>();
+            if (situation.BestTarget != null && situation.HittableEnemies.Contains(situation.BestTarget)) candidates.Add(situation.BestTarget);
+            foreach (var e in situation.HittableEnemies)
+                if (!candidates.Contains(e)) candidates.Add(e);
+
+            foreach (var enemy in candidates)
+            {
+                if (enemy == null || !enemy.IsConscious || IsAlreadySworn(situation, oath, enemy)) continue;
+                var hit = CombatAPI.GetHitChance(melee, unit, enemy);
+                int avoidance = hit != null ? Math.Max(hit.EstimatedDodgeChance, hit.EstimatedParryChance) : 0;
+                if (avoidance >= ExtraOathMinAvoidance)
+                {
+                    why = $"extra oath: {enemy.CharacterName} dodges/parries {avoidance}% and the oath's attack can't be avoided";
+                    return enemy;
+                }
+                why = $"kill reward already taken this round; {enemy.CharacterName} only dodges/parries {avoidance}%";
+                return null;  // only the enemy she's about to hit is worth an extra oath
+            }
+            why = "kill reward already taken this round; enemies in reach are already sworn";
+            return null;
+        }
+
         /// <summary>Reachable this turn and likely to die to her best melee attack; best target score wins.</summary>
-        private static BaseUnitEntity ChooseOathTarget(Situation situation, float oathCost, out string why)
+        private static BaseUnitEntity ChooseOathTarget(Situation situation, AbilityData oath, float oathCost, out string why)
         {
             var unit = situation.Unit;
             float apAfter = situation.CurrentAP - oathCost;
@@ -238,6 +364,7 @@ namespace CompanionAI_v3.Planning.Planners
             {
                 if (enemy == null || !enemy.IsConscious || enemy.LifeState.IsDead) continue;
                 if (CombatAPI.IsTargetImmuneToDamage(enemy, unit)) continue;
+                if (IsAlreadySworn(situation, oath, enemy)) continue;
 
                 float dist = CombatAPI.GetDistanceInTiles(unit, enemy);
                 if (dist > melee + walk + jump) continue;
@@ -277,13 +404,6 @@ namespace CompanionAI_v3.Planning.Planners
             if (casterNode == null || range < 1f) return null;
 
             var oathTarget = GetOathTarget(situation);
-            // The oath pays off when her attack kills its target; a landing hit that kills it first wastes that.
-            // While she can already hit the oath target, attack it before jumping.
-            if (oathTarget != null && situation.HittableEnemies != null && situation.HittableEnemies.Contains(oathTarget))
-            {
-                if (Main.IsDebugEnabled) Log.Planning.Debug($"[{roleName}] Death From Above strike held: attack oath target {oathTarget.CharacterName} first");
-                return null;
-            }
             bool hasSelfAoE = situation.HasSelfAoE;
             bool avoidHazards = !situation.NeedsAoEEvacuation;
             var candidates = new List<(Vector3 pos, int enemies, float score)>();
