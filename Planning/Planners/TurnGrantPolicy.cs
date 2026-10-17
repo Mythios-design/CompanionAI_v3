@@ -97,15 +97,48 @@ namespace CompanionAI_v3.Planning.Planners
         }
 
         /// <summary>Set to prefer melee, or holding a melee weapon in the main hand.</summary>
+        /// <summary>
+        /// The character's range setting decides first. With it on Adaptive, anyone with a ranged attack (a ranged
+        /// weapon attack or a psychic power that reaches past melee) counts as ranged, so a psyker carrying a staff
+        /// is still ranged. Grenades and thrown items don't count.
+        /// </summary>
         private static bool IsMeleeCharacter(BaseUnitEntity unit)
         {
-            if (CombatAPI.GetEffectiveRangePreference(unit) == RangePreference.PreferMelee) return true;
-            var weapon = unit.Body?.PrimaryHand?.MaybeWeapon;
-            return weapon?.Blueprint != null && weapon.Blueprint.IsMelee;
+            var setting = CombatAPI.GetRangePreference(unit);
+            if (setting == RangePreference.PreferMelee) return true;
+            if (setting == RangePreference.PreferRanged) return false;
+            return !HasRangedAttack(unit);
+        }
+
+        private const float MeleeReachTiles = 2f;
+
+        private static bool HasRangedAttack(BaseUnitEntity unit)
+        {
+            var raw = unit.Abilities?.RawFacts;
+            if (raw == null) return false;
+            foreach (var fact in raw)
+            {
+                var ability = fact?.Data;
+                if (IsRangedAttack(ability)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>A ranged weapon attack or a psychic power aimed at enemies beyond melee reach.</summary>
+        private static bool IsRangedAttack(AbilityData ability)
+        {
+            var bp = ability?.Blueprint;
+            if (bp == null || !bp.CanTargetEnemies || ability.IsMelee) return false;
+            if (AbilityDatabase.IsReload(ability) || AbilityDatabase.IsGapCloser(ability) || CombatHelpers.IsGrenadeOrExplosive(ability)) return false;
+            if (bp.IsHeroicAct || bp.IsDesperateMeasure) return false;
+            bool weaponAttack = ability.Weapon != null && !ability.Weapon.Blueprint.IsMelee;
+            bool power = bp.IsPsykerAbility;
+            if (!weaponAttack && !power) return false;
+            return CombatAPI.GetAbilityRangeInTiles(ability) > MeleeReachTiles;
         }
 
         /// <summary>
-        /// Can any of the unit's weapon attacks reach an enemy from its current tile? Ignores cooldowns: the game
+        /// Can any of the unit's weapon attacks (or psychic powers, unless meleeOnly) reach an enemy from its current tile? Ignores cooldowns: the game
         /// resets them for the bonus turn, and the ally may have attacked already this round. With meleeOnly, only
         /// melee weapon attacks count (an enemy within melee reach = engaged).
         /// </summary>
@@ -120,7 +153,11 @@ namespace CompanionAI_v3.Planning.Planners
             foreach (var fact in raw)
             {
                 var ability = fact?.Data;
-                if (ability?.Weapon == null || ability.Blueprint == null || !ability.Blueprint.CanTargetEnemies) continue;
+                var bp = ability?.Blueprint;
+                if (bp == null || !bp.CanTargetEnemies) continue;
+                // Weapon attacks, plus psychic powers for ranged characters (a psyker's powers are their attacks)
+                bool power = !meleeOnly && bp.IsPsykerAbility && !bp.IsHeroicAct && !bp.IsDesperateMeasure;
+                if (ability.Weapon == null && !power) continue;
                 if (AbilityDatabase.IsReload(ability) || CombatHelpers.IsGrenadeOrExplosive(ability)) continue;
                 // Gap closers move the unit and are often held back (e.g. Death From Above kept in reserve), so they
                 // don't count as hitting from where the unit stands
