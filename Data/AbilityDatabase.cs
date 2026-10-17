@@ -132,7 +132,7 @@ namespace CompanionAI_v3.Data
             // Finisher - 마무리 (★ v3.7.65: IsFinisherAbility 플래그 추가)
             // ========================================
 
-            { "6a4c3b65dff840e0aab5966ffe8aa7ba", new AbilityInfo("6a4c3b65dff840e0aab5966ffe8aa7ba", "DeathSentence", AbilityTiming.Finisher, targetHP: 30f, flags: AbilityFlags.IsFinisherAbility) },
+            { "6a4c3b65dff840e0aab5966ffe8aa7ba", new AbilityInfo("6a4c3b65dff840e0aab5966ffe8aa7ba", "DeathSentence", AbilityTiming.Debuff, flags: AbilityFlags.EnemyTarget) },
             { "5b8545bc7a90491d865410a585071efe", new AbilityInfo("5b8545bc7a90491d865410a585071efe", "MissionComplete", AbilityTiming.Finisher, targetHP: 30f, flags: AbilityFlags.IsFinisherAbility) },
             { "cf6c3356a9b44dd7badea16a625687be", new AbilityInfo("cf6c3356a9b44dd7badea16a625687be", "MissionComplete_Sub", AbilityTiming.Finisher, targetHP: 30f, flags: AbilityFlags.IsFinisherAbility) },
             { "ed10346264414140936abd17d6c5b445", new AbilityInfo("ed10346264414140936abd17d6c5b445", "TwilightDismantle", AbilityTiming.Finisher, targetHP: 25f, flags: AbilityFlags.IsFinisherAbility) },

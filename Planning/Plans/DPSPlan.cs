@@ -1319,6 +1319,9 @@ namespace CompanionAI_v3.Planning.Plans
                 }
             }
 
+            // Operative / Arbitrator shooters: debuff the enemy about to be shot, then shoot it
+            Planners.OperativeSequence.Arrange(actions, situation, ref remainingAP, RoleName);
+
             // 턴 종료
             if (actions.Count == 0)
             {
