@@ -174,6 +174,40 @@ namespace CompanionAI_v3.Planning.Planners
             return living[living.Count - 1];
         }
 
+        /// <summary>Tiles she can walk to this turn (MP plus the MP spending wounds gives), where she stands included.</summary>
+        private static List<CustomGridNodeBase> WalkTiles(Situation situation)
+        {
+            var list = new List<CustomGridNodeBase>();
+            var unit = situation.Unit;
+            if (unit.CurrentUnwalkableNode is CustomGridNodeBase here) list.Add(here);
+            float mp = situation.CurrentMP + WoundMPBonus(unit);
+            if (mp <= 0f) return list;
+            var tiles = MovementAPI.FindAllReachableTilesWithThreatsSync(unit, mp);
+            if (tiles == null) return list;
+            foreach (var cell in tiles.Values)
+                if (cell.IsCanStand && cell.Node is CustomGridNodeBase node) list.Add(node);
+            return list;
+        }
+
+        /// <summary>
+        /// She can attack the enemy this turn: a tile she can walk to is in melee reach of it, or within jump range of
+        /// a tile next to it (Death From Above with uses left). Uses the real walking paths, not a straight line.
+        /// </summary>
+        private static bool CanGetAt(Situation situation, BaseUnitEntity enemy, List<CustomGridNodeBase> walkTiles)
+        {
+            float melee = MovementPlanner.GetUnitMeleeRange(situation.Unit) + 0.5f;
+            float jump = 0f;
+            foreach (var attack in situation.AvailableAttacks)
+                if (IsDeathFromAbove(attack) && UsesLeft(attack) > 0)
+                    jump = Math.Max(jump, CombatAPI.GetAbilityRangeInTiles(attack));
+            foreach (var node in walkTiles)
+            {
+                float d = CombatAPI.GetDistanceInTiles(node.Vector3Position, enemy);
+                if (d <= melee || (jump > 0f && d <= jump + AdjacentTiles)) return true;
+            }
+            return false;
+        }
+
         /// <summary>How far she can get to attack this turn: melee reach + MP (and the wound MP bonus) + a jump.</summary>
         private static float OathReach(Situation situation, out string text)
         {
@@ -325,6 +359,7 @@ namespace CompanionAI_v3.Planning.Planners
 
             bool engaged = CombatAPI.IsInThreateningArea(unit);
             float reach = OathReach(situation, out string reachText);
+            List<CustomGridNodeBase> walkTiles = null;  // tiles she can walk to this turn, built on first need
             string where = engaged ? "hittable from here (engaged)" : $"within {reachText}";
             var role = situation.CharacterSettings?.Role ?? AIRole.Auto;
             var scoreRole = role == AIRole.Auto ? AIRole.DPS : role;
@@ -338,7 +373,13 @@ namespace CompanionAI_v3.Planning.Planners
                 if (enemy == null || !enemy.IsConscious || enemy.LifeState.IsDead) continue;
                 if (CombatAPI.IsTargetImmuneToDamage(enemy, unit)) continue;
                 if (IsAlreadySworn(situation, oath, enemy)) continue;
-                if (engaged ? !situation.HittableEnemies.Contains(enemy) : CombatAPI.GetDistanceInTiles(unit, enemy) > reach) continue;
+                if (engaged) { if (!situation.HittableEnemies.Contains(enemy)) continue; }
+                else
+                {
+                    if (CombatAPI.GetDistanceInTiles(unit, enemy) > reach) continue;
+                    if (walkTiles == null) walkTiles = WalkTiles(situation);
+                    if (!CanGetAt(situation, enemy, walkTiles)) continue;
+                }
                 inReach++;
 
                 float hp = CombatAPI.GetActualHP(enemy);

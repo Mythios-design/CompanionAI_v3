@@ -145,7 +145,7 @@ namespace CompanionAI_v3.Analysis
                 float killProb = hitChance * pKillIfHit;
 
                 float avgDamage = (minDamage + maxDamage) / 2f;
-                float apCost = attack.CalculateActionPointCost();
+                float apCost = CombatAPI.GetAbilityAPCost(attack);
                 // 효율 — KillProbability 가중 (낮은 명중률은 자동 페널티)
                 float efficiency = (killProb * avgDamage) / Math.Max(apCost, 0.1f);
 
@@ -234,7 +234,7 @@ namespace CompanionAI_v3.Analysis
             foreach (var buff in attackBuffs)
             {
                 float buffMultiplier = EstimateBuffMultiplier(buff);
-                float buffAPCost = buff.CalculateActionPointCost();
+                float buffAPCost = CombatAPI.GetAbilityAPCost(buff);
 
                 foreach (var attack in attacks)
                 {
@@ -245,7 +245,7 @@ namespace CompanionAI_v3.Analysis
                     // 버프 적용 후 킬 가능
                     if (buffedDamage >= targetHP)
                     {
-                        float attackAPCost = attack.CalculateActionPointCost();
+                        float attackAPCost = CombatAPI.GetAbilityAPCost(attack);
                         float totalAPCost = buffAPCost + attackAPCost;
 
                         // AP가 충분한지 확인
@@ -323,7 +323,7 @@ namespace CompanionAI_v3.Analysis
                 .Select(a => {
                     var (min, max, _) = CombatAPI.GetDamagePrediction(a, target);
                     float damage = (min + max) / 2f;
-                    float apCost = a.CalculateActionPointCost();
+                    float apCost = CombatAPI.GetAbilityAPCost(a);
 
                     // ★ AOE 클러스터 보너스: 게임 API로 실제 영향 받는 적 수 계산
                     int aoeEnemyCount = CombatAPI.CountEnemiesInPattern(

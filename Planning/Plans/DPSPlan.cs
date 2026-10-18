@@ -334,7 +334,7 @@ namespace CompanionAI_v3.Planning.Plans
                                 break;  // 시퀀스 중단
                             }
 
-                            float apCost = ability.CalculateActionPointCost();
+                            float apCost = CombatAPI.GetAbilityAPCost(ability);
                             if (remainingAP >= apCost)
                             {
                                 var timing = AbilityDatabase.GetTiming(ability);
@@ -633,7 +633,7 @@ namespace CompanionAI_v3.Planning.Plans
                     if (!CombatAPI.IsAbilityAvailable(ability, out unavailReasons))
                         break;
 
-                    float apCost = ability.CalculateActionPointCost();
+                    float apCost = CombatAPI.GetAbilityAPCost(ability);
                     if (remainingAP < apCost) break;
 
                     var timing = AbilityDatabase.GetTiming(ability);

@@ -395,7 +395,8 @@ namespace CompanionAI_v3.GameInterface
             if (ability == null) return 1f;
             try
             {
-                return ability.CalculateActionPointCost();
+                // Free uses (e.g. a -100 cost bonus) come back negative; an attack never gives AP back
+                return Math.Max(0f, ability.CalculateActionPointCost());
             }
             catch (Exception ex)
             {

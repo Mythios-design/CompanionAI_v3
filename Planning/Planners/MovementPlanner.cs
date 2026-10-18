@@ -420,9 +420,13 @@ namespace CompanionAI_v3.Planning.Planners
                     float gcRange = CombatAPI.GetAbilityRangeInTiles(gapCloser);
                     float maxReachWithWalk = gcRange + remainingMP + 1;  // +1 for adjacency
 
+                    // A Bladedancer with a living oath target jumps only at it: her next attack has to land there
+                    var oathTarget = BladedancerTactics.GetOathTarget(situation);
+
                     foreach (var candidateTarget in situation.Enemies)
                     {
                         if (candidateTarget == null || !candidateTarget.IsConscious) continue;
+                        if (oathTarget != null && candidateTarget != oathTarget) continue;
                         if (!BladedancerTactics.AllowJumpAsGapCloser(situation, gapCloser, candidateTarget, remainingAP, remainingMP, roleName)) continue;
                         float dist = CombatCache.GetDistanceInTiles(situation.Unit, candidateTarget);
 
@@ -449,6 +453,18 @@ namespace CompanionAI_v3.Planning.Planners
                             situation.Unit, candidateTarget, gapCloser, situation, walkDest.Position);
 
                         if (!landing.HasValue) continue;
+
+                        // The jump must be possible from where the walk ends (line of sight, range), or the walk is wasted
+                        var walkNode = walkDest.Position.GetNearestNodeXZ() as CustomGridNodeBase;
+                        var landingNode = landing.Value.GetNearestNodeXZ() as CustomGridNodeBase;
+                        AbilityData.UnavailabilityReasonType? jumpWhy = null;
+                        if (walkNode == null || landingNode == null
+                            || !gapCloser.CanTargetFromNode(walkNode, landingNode, new TargetWrapper(landing.Value),
+                                out int _, out Kingmaker.View.Covers.LosCalculations.CoverType _, out jumpWhy))
+                        {
+                            if (Main.IsDebugEnabled) Log.Planning.Debug($"[{roleName}] Walk+GapCloser: {gapCloser.Name} -> {candidateTarget.CharacterName} skipped - can't jump from the walk's end ({(walkNode == null || landingNode == null ? "no node" : jumpWhy?.ToString() ?? "refused")})");
+                            continue;
+                        }
 
                         // 성공! Walk + GapCloser 콤보 생성
                         preMoveAction = PlannedAction.Move(walkDest.Position, $"Approach for {gapCloser.Name}");
@@ -514,6 +530,15 @@ namespace CompanionAI_v3.Planning.Planners
                 if (!landing.HasValue)
                 {
                     if (Main.IsDebugEnabled) Log.Planning.Debug($"[{roleName}] ChargeApproach: {gapCloser.Name} — no valid spot toward {target.CharacterName}");
+                    continue;
+                }
+
+                // Charge clears MP, so a charge that doesn't end next to the enemy throws the walk away and
+                // still leaves no attack: walk first instead and keep the AP; the replan after the walk can
+                // charge from closer if that then reaches.
+                if (landingDist > meleeRange + 0.5f)
+                {
+                    Log.Planning.Info($"[{roleName}] ChargeApproach: {gapCloser.Name} would land {landingDist:F1}t from {target.CharacterName}, not next to it - walking instead, AP kept");
                     continue;
                 }
 
