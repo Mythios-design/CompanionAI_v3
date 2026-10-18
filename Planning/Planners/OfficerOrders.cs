@@ -27,6 +27,8 @@ namespace CompanionAI_v3.Planning.Planners
     {
         private const string VOICE_OF_COMMAND = "9c78e44bf8ff44a9afff8370c673c9ad";
         private const string GroupPrefix = "BringItDown_";
+        // Entry in the plan's buff/target set: Voice of Command was planned on this ally to pair with Bring It Down!
+        private const string PairMarker = "bringitdownpair:";
 
         public static PlannedAction Plan(Situation situation, ref float remainingAP, List<BaseUnitEntity> prioritizedTargets,
             HashSet<string> plannedTurnGrantTargetIds, HashSet<string> plannedBuffTargetPairs,
@@ -45,15 +47,22 @@ namespace CompanionAI_v3.Planning.Planners
             float bidCost = CombatAPI.GetAbilityAPCost(bringItDown);
             float voiceCost = voice != null ? CombatAPI.GetAbilityAPCost(voice) : 0f;
 
-            // Second half of a pair: Voice of Command already planned on an ally who still needs Bring It Down!
+            // Second half of a pair: Voice of Command planned by this planner (marked below) on an ally who still
+            // needs Bring It Down!. A Voice of Command the normal ally-buff order chose doesn't count. The grant
+            // check runs again, so the ally must still be worth a bonus turn.
             if (voice != null && plannedBuffTargetPairs != null)
             {
                 foreach (var ally in prioritizedTargets)
                 {
                     string id = IdOf(ally);
-                    if (!plannedBuffTargetPairs.Contains($"{VOICE_OF_COMMAND}:{id}")) continue;
+                    if (!plannedBuffTargetPairs.Contains(PairMarker + id)) continue;
                     if (plannedTurnGrantTargetIds != null && plannedTurnGrantTargetIds.Contains(id)) continue;
                     if (bidCost > remainingAP + 0.01f) return null;
+                    if (!TurnGrantPolicy.IsWorthGranting(bringItDown, ally, out string pairWhy))
+                    {
+                        Log.Planning.Info($"[{roleName}] Skip {bringItDown.Name} -> {ally.CharacterName} after Voice of Command: {pairWhy}");
+                        continue;
+                    }
                     return PlanGrant(bringItDown, ally, bidCost, ref remainingAP, plannedTurnGrantTargetIds, GroupPrefix + id,
                         $"[{roleName}] Bring It Down! -> {ally.CharacterName} after Voice of Command", roleName);
                 }
@@ -84,6 +93,7 @@ namespace CompanionAI_v3.Planning.Planners
                     var action = PlannedAction.Buff(voice, ally, $"Voice of Command on {ally.CharacterName} before Bring It Down!", voiceCost);
                     action.GroupTag = GroupPrefix + id;
                     action.FailurePolicy = GroupFailurePolicy.SkipRemainingInGroup;
+                    plannedBuffTargetPairs?.Add(PairMarker + id);
                     Log.Planning.Info($"[{roleName}] Voice of Command -> {ally.CharacterName}, then Bring It Down!" +
                         (inReach ? "" : $" (out of reach without it: {bidWhy})"));
                     return action;
