@@ -35,6 +35,13 @@ namespace CompanionAI_v3.Planning.Planners
                     situation.HeldBloodPhial = situation.HeldBloodPhial ?? a;
                     return true;
                 });
+                // Raining Blood only pays off before a single-target melee attack: RainingBloodPlanner places it
+                RemoveWhere(situation, a =>
+                {
+                    if (!RainingBloodPlanner.IsRainingBlood(a)) return false;
+                    situation.HeldRainingBlood = situation.HeldRainingBlood ?? a;
+                    return true;
+                });
 
                 int removedDesperate = RemoveWhere(situation, a => a.Blueprint?.IsDesperateMeasure == true);
                 if (removedDesperate > 0)

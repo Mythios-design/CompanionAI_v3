@@ -1160,6 +1160,11 @@ namespace CompanionAI_v3.Planning.Plans
                 actions.Add(turnEndAction);
             }
 
+            // Raining Blood: before a single-target melee attack, with AP left (ahead of Blood Phial)
+
+            Planners.RainingBloodPlanner.Arrange(actions, situation, ref remainingAP, RoleName);
+
+
             // Blood Phial: lowest-priority AP spend, after everything else (goes before a turn-ending ability)
             Planners.BloodPhialPlanner.Append(actions, situation, ref remainingAP, RoleName);
 

@@ -1325,6 +1325,11 @@ namespace CompanionAI_v3.Planning.Plans
             // Operative / Arbitrator shooters: debuff the enemy about to be shot, then shoot it
             Planners.OperativeSequence.Arrange(actions, situation, ref remainingAP, RoleName);
 
+            // Raining Blood: before a single-target melee attack, with AP left (ahead of Blood Phial)
+
+            Planners.RainingBloodPlanner.Arrange(actions, situation, ref remainingAP, RoleName);
+
+
             // Blood Phial: lowest-priority AP spend, after everything else
             Planners.BloodPhialPlanner.Append(actions, situation, ref remainingAP, RoleName);
 

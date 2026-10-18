@@ -266,6 +266,9 @@ namespace CompanionAI_v3.Analysis
         /// <summary>Blood Phial, held out of every attack list: spent last with leftover AP (BloodPhialPlanner).</summary>
         public AbilityData HeldBloodPhial { get; set; }
 
+        /// <summary>Raining Blood, held out of the buff picks: put before a single-target melee attack (RainingBloodPlanner).</summary>
+        public AbilityData HeldRainingBlood { get; set; }
+
         /// <summary>사용 가능한 공격</summary>
         public List<AbilityData> AvailableAttacks { get; set; } = new List<AbilityData>();
 
@@ -511,6 +514,7 @@ namespace CompanionAI_v3.Analysis
             AvailableBuffs.Clear();
             LastResortBuffs.Clear();
             HeldBloodPhial = null;
+            HeldRainingBlood = null;
             AvailableAttacks.Clear();
             AvailableHeals.Clear();
             AvailableDebuffs.Clear();
