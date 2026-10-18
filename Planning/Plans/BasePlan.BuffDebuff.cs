@@ -253,6 +253,12 @@ namespace CompanionAI_v3.Planning.Plans
                 bool isTurnGrant = AbilityDatabase.IsTurnGrantAbility(buff);
 
                 var targetList = prioritizedTargets;
+                // Finest Hour!: the ally who would deal the most damage with a full extra turn; none if nobody can reach an enemy
+                if (ExtraTurnValue.IsFinestHour(buff))
+                {
+                    targetList = ExtraTurnValue.Rank(situation.CombatantAllies, situation.Unit, situation.Enemies, buff.Name, RoleName);
+                    if (targetList.Count == 0) continue;
+                }
 
                 foreach (var target in targetList)
                 {

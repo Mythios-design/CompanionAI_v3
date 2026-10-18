@@ -134,7 +134,7 @@ namespace CompanionAI_v3.Planning.Planners
                     break;
 
                 case CombatAPI.UltimateTargetType.AllyBuff:
-                    var bestAlly = SelectBestAllyForUltimate(situation);
+                    var bestAlly = SelectBestAllyForUltimate(situation, ability, roleName);
                     if (bestAlly != null) { target = new TargetWrapper(bestAlly); targetDesc = bestAlly.CharacterName; }
                     break;
 
@@ -185,11 +185,18 @@ namespace CompanionAI_v3.Planning.Planners
         /// ★ v3.8.41: 궁극기 사용 대상으로 최적 아군 선택 (Finest Hour! 등)
         /// 우선순위: 풀AP 공격 가능한 강한 딜러 > HP 높은 아군 > 가장 가까운 아군
         /// </summary>
-        private static BaseUnitEntity SelectBestAllyForUltimate(Situation situation)
+        private static BaseUnitEntity SelectBestAllyForUltimate(Situation situation, AbilityData ability, string roleName)
         {
             // ★ v3.18.4: CombatantAllies 사용 (사역마 제외)
             if (situation.CombatantAllies == null || situation.CombatantAllies.Count == 0)
                 return null;
+
+            // Finest Hour!: the ally who would deal the most damage with a full extra turn; none if nobody can reach an enemy
+            if (ExtraTurnValue.IsFinestHour(ability))
+            {
+                var ranked = ExtraTurnValue.Rank(situation.CombatantAllies, situation.Unit, situation.Enemies, ability.Name, roleName);
+                return ranked.Count > 0 ? ranked[0] : null;
+            }
 
             BaseUnitEntity bestAlly = null;
             float bestScore = float.MinValue;
