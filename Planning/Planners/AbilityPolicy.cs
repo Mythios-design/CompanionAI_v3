@@ -28,6 +28,14 @@ namespace CompanionAI_v3.Planning.Planners
             if (situation?.Unit == null) return;
             try
             {
+                // Blood Phial is the last AP spend: kept out of every pick, used by BloodPhialPlanner at the end
+                RemoveWhere(situation, a =>
+                {
+                    if (!BloodPhialPlanner.IsBloodPhial(a)) return false;
+                    situation.HeldBloodPhial = situation.HeldBloodPhial ?? a;
+                    return true;
+                });
+
                 int removedDesperate = RemoveWhere(situation, a => a.Blueprint?.IsDesperateMeasure == true);
                 if (removedDesperate > 0)
                     Log.Planning.Info($"[AbilityPolicy] {situation.Unit.CharacterName}: Desperate Measures held back (AI never uses them)");

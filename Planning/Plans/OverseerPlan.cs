@@ -1160,6 +1160,9 @@ namespace CompanionAI_v3.Planning.Plans
                 actions.Add(turnEndAction);
             }
 
+            // Blood Phial: lowest-priority AP spend, after everything else (goes before a turn-ending ability)
+            Planners.BloodPhialPlanner.Append(actions, situation, ref remainingAP, RoleName);
+
             // 행동 없으면 턴 종료
             if (actions.Count == 0)
             {

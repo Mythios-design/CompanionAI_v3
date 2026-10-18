@@ -263,6 +263,9 @@ namespace CompanionAI_v3.Analysis
         /// <summary>Buffs only used when nothing else used the AP (Phase 9), e.g. Word of the Emperor.</summary>
         public List<AbilityData> LastResortBuffs { get; set; } = new List<AbilityData>();
 
+        /// <summary>Blood Phial, held out of every attack list: spent last with leftover AP (BloodPhialPlanner).</summary>
+        public AbilityData HeldBloodPhial { get; set; }
+
         /// <summary>사용 가능한 공격</summary>
         public List<AbilityData> AvailableAttacks { get; set; } = new List<AbilityData>();
 
@@ -507,6 +510,7 @@ namespace CompanionAI_v3.Analysis
             // Abilities
             AvailableBuffs.Clear();
             LastResortBuffs.Clear();
+            HeldBloodPhial = null;
             AvailableAttacks.Clear();
             AvailableHeals.Clear();
             AvailableDebuffs.Clear();
