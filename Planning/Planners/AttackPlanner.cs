@@ -1816,10 +1816,14 @@ namespace CompanionAI_v3.Planning.Planners
                 int bestEnemyCount = 0;
 
                 var hittableEnemies = situation.HittableEnemies ?? situation.Enemies;
+                // A Bladedancer's attacks go at her Blood Oath target while she can hit it: the kill heals her
+                var oathTarget = BladedancerTactics.GetOathTarget(situation);
+                bool oathOnly = oathTarget != null && hittableEnemies.Contains(oathTarget);
                 for (int enemyIdx = 0; enemyIdx < hittableEnemies.Count; enemyIdx++)
                 {
                     var enemy = hittableEnemies[enemyIdx];
                     if (enemy == null) continue;
+                    if (oathOnly && enemy != oathTarget) continue;
                     try { if (enemy.LifeState?.IsDead == true) continue; }
                     catch (System.Exception ex) { if (Main.IsDebugEnabled) Log.Planning.Error(ex, $"[AttackPlanner] LifeState check silent"); }
 

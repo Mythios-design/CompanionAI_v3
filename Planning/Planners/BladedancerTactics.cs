@@ -266,7 +266,7 @@ namespace CompanionAI_v3.Planning.Planners
         ///    While a sworn enemy she can reach lives, no other oath.
         ///  - Reward taken: extra oaths only on the enemy she's about to hit, when its dodge or parry is at least
         ///    <see cref="ExtraOathMinAvoidance"/>%, since the oath's attack can't be dodged or parried.
-        /// Each oath costs wounds; the 70% HP gate is applied by the analyzer.
+        /// Each oath costs wounds; there is no HP limit, since the cost can't kill her and the kill heals her.
         /// </summary>
         private static PlannedAction PlanBloodOath(Situation situation, ref float remainingAP, string roleName)
         {
@@ -350,9 +350,9 @@ namespace CompanionAI_v3.Planning.Planners
         }
 
         /// <summary>
-        /// An enemy she can reach this turn. In order: one her best affordable melee attack can probably kill (best
-        /// target score wins), the enemy her attacks are aimed at this turn, then the reachable enemy with the least HP.
-        /// The oath stays on the enemy until it dies, so a target she can't kill today still sets up a later reward.
+        /// The enemy with the least HP that she can reach this turn (ties: best target score). Killing an oath target
+        /// heals her, so the quickest kill comes first; her attacks then focus that enemy (oath target priority in
+        /// the analyzer and the attack planner). The oath stays on the enemy until it dies.
         /// </summary>
         private static BaseUnitEntity ChooseOathTarget(Situation situation, AbilityData oath, float oathCost, out string why)
         {
@@ -376,10 +376,8 @@ namespace CompanionAI_v3.Planning.Planners
             var role = situation.CharacterSettings?.Role ?? AIRole.Auto;
             var scoreRole = role == AIRole.Auto ? AIRole.DPS : role;
 
-            BaseUnitEntity killable = null, lowest = null;
-            float bestScore = float.MinValue, lowestHP = float.MaxValue;
-            string killWith = null;
-            bool bestTargetReachable = false;
+            BaseUnitEntity best = null;
+            float bestHP = float.MaxValue, bestScore = float.MinValue;
             foreach (var enemy in situation.Enemies)
             {
                 if (enemy == null || !enemy.IsConscious || enemy.LifeState.IsDead) continue;
@@ -387,36 +385,24 @@ namespace CompanionAI_v3.Planning.Planners
                 if (IsAlreadySworn(situation, oath, enemy)) continue;
                 if (CombatAPI.GetDistanceInTiles(unit, enemy) > reach) continue;
 
-                if (enemy == situation.BestTarget) bestTargetReachable = true;
                 float hp = CombatAPI.GetActualHP(enemy);
-                if (hp < lowestHP) { lowestHP = hp; lowest = enemy; }
-
-                // The oath's attack can't be dodged or parried, so the estimate is a fair guess at a hit.
-                AbilityData killer = null;
-                foreach (var attack in melee)
-                    if (CombatAPI.EstimateDamage(attack, enemy) >= hp) { killer = attack; break; }
-                if (killer == null) continue;
+                if (hp > bestHP + 0.01f) continue;
                 float score = TargetScorer.ScoreEnemy(enemy, situation, scoreRole);
-                if (score > bestScore) { bestScore = score; killable = enemy; killWith = killer.Name; }
+                if (hp < bestHP - 0.01f || score > bestScore) { bestHP = hp; bestScore = score; best = enemy; }
+            }
+            if (best == null)
+            {
+                why = $"no enemy within {reachText}";
+                return null;
             }
 
-            if (killable != null)
-            {
-                why = $"{killable.CharacterName} reachable and {killWith} can kill ({reachText})";
-                return killable;
-            }
-            if (bestTargetReachable)
-            {
-                why = $"{situation.BestTarget.CharacterName} is this turn's target; the oath stays until it dies ({reachText})";
-                return situation.BestTarget;
-            }
-            if (lowest != null)
-            {
-                why = $"{lowest.CharacterName} has the least HP in reach; the oath stays until it dies ({reachText})";
-                return lowest;
-            }
-            why = $"no enemy within {reachText}";
-            return null;
+            // The oath's attack can't be dodged or parried, so the estimate is a fair guess at a hit.
+            string killWith = null;
+            foreach (var attack in melee)
+                if (CombatAPI.EstimateDamage(attack, best) >= bestHP) { killWith = attack.Name; break; }
+            why = $"{best.CharacterName} has the least HP in reach ({bestHP:F0})" +
+                (killWith != null ? $", {killWith} can kill it this turn" : ", the oath stays until it dies") + $" ({reachText})";
+            return best;
         }
 
         /// <summary>Death From Above as an attack: land next to the most enemies (at least <see cref="StrikeMinEnemies"/>).</summary>

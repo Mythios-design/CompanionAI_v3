@@ -79,7 +79,7 @@ A granted turn is wasted on an ally who can't act with it. `TurnGrantPolicy` dec
 
 **Priorities:**
 
-1. **Blood Oath** at least once a turn on an enemy she can reach and will attack. The oath stays on the enemy until it dies, so it sets up a later kill reward even when she can't kill it today. Target order: one her best affordable melee attack can probably kill, then the enemy her attacks are aimed at this turn, then the reachable enemy with the least HP. While a sworn enemy she can reach is alive, no new oath; one out of reach doesn't block a new oath. After the round's kill reward, extra oaths go only on hard-to-hit enemies (20%+ dodge or parry) she's about to attack.
+1. **Blood Oath** at least once a turn on an enemy she can reach and will attack. The oath stays on the enemy until it dies, so it sets up a later kill reward even when she can't kill it today. Target: the enemy with the least HP she can reach this turn, and her attacks (single-target, Brutal Strike's aim, kill sequences) focus it, because the kill heals her. No HP limit on casting it. While a sworn enemy she can reach is alive, no new oath; one out of reach doesn't block a new oath. After the round's kill reward, extra oaths go only on hard-to-hit enemies (20%+ dodge or parry) she's about to attack.
 2. **Death From Above as an attack** when the landing touches 2 or more enemies (and the oath target if one exists).
 3. **Death From Above as a gap closer** when the target is in range and a melee attack is still usable after landing.
 4. **Blade Dance** whenever enough enemies are adjacent and no ally is. If an ally blocks it, step to a tile touching enemies and no allies first.
@@ -93,7 +93,7 @@ A granted turn is wasted on an ally who can't act with it. `TurnGrantPolicy` dec
 
 - Abilities not in the party yet: Captive Audience, Acrobatic Artistry, Veil of Blades, Oath of Vengeance.
 
-> **Decision (revised 2026-10-18):** at least one oath a turn on an enemy she can reach and attack, killable or not, because the oath lasts until the enemy dies. This replaces the 2026-10-17 answer (oath only on an enemy she can kill this turn), which left her swearing no oaths in a whole fight. The leftover-AP step never casts Blood Oath.
+> **Decision (revised 2026-10-18):** at least one oath a turn on an enemy she can reach and attack, killable or not, because the oath lasts until the enemy dies. Later on 2026-10-18: no HP limit (the cost can't kill her), the oath goes on the lowest-HP enemy in reach, and her attacks focus that enemy to win back the health first. This replaces the 2026-10-17 answer (oath only on an enemy she can kill this turn), which left her swearing no oaths in a whole fight. The leftover-AP step never casts Blood Oath.
 
 > **Decision:** yes, 40% HP stays the line for the end-of-turn move into a crowd.
 
@@ -262,7 +262,7 @@ Answers from 2026-10-17, in question order.
 
 | # | Topic | Decision | Code change |
 |---|---|---|---|
-| 1 | Blood Oath on enemies she can't kill this turn | Revised 2026-10-18: yes, at least one oath a turn on an enemy she can reach and attack | Built |
+| 1 | Blood Oath on enemies she can't kill this turn | Revised 2026-10-18: yes, at least one oath a turn, on the lowest-HP enemy in reach, attacks focused on it, no HP limit | Built |
 | 2 | 40% HP line for the Bladedancer's engagement move | Yes, keep 40% | None |
 | 3 | Rule for Death Waltz | No, generic Heroic Act | None |
 | 4 | Who gets Finest Hour! | The ally who would deal the most damage with a full turn | To build |

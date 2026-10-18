@@ -194,7 +194,7 @@ namespace CompanionAI_v3.Data
             // ★ v3.0.42: BloodOath는 적을 마킹하는 스킬 (SelfDamage → Marker)
             // 적에게 사용 → 공격 시 보너스 획득, HP 비용 있음
             // ★ v3.9.50: HP 임계값 상향 (자해 스킬 제한 강화)
-            { "590c990c1d684fd09ae883754d28a8ac", new AbilityInfo("590c990c1d684fd09ae883754d28a8ac", "BloodOath", AbilityTiming.Marker, hpThreshold: 70f, flags: AbilityFlags.EnemyTarget) },
+            { "590c990c1d684fd09ae883754d28a8ac", new AbilityInfo("590c990c1d684fd09ae883754d28a8ac", "BloodOath", AbilityTiming.Marker, flags: AbilityFlags.EnemyTarget) },
             // 블루프린트 실측 교정: "Bloodletting"(실명 Ensanguinate)은 자해(HP코스트)가
             // 아님 — AbilityResourceWounds 없음, 대신 +3 MP 회복(RestoreActionPoints) + 5뎀 자체 출혈 DOT.
             // 기존 SelfDamage/hp60 등록은 오류(HP코스트 오인). 자체 출혈이 있으므로 hp40 게이트는 유지하되

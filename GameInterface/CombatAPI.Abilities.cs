@@ -338,6 +338,9 @@ namespace CompanionAI_v3.GameInterface
         public static bool IsSelfDamageBlockedAtHP(AbilityData ability, float hpPercent)
         {
             if (ability == null) return false;
+            // Blood Oath: no HP limit. It goes on each enemy once (no repeat-cast loop), its cost can't kill her, and
+            // the kill it sets up heals her
+            if (Planning.Planners.BladedancerTactics.IsBloodOath(ability)) return false;
             if (!IsSelfDamagingAbility(ability)) return false;
             return hpPercent < GetSelfDamageHPThreshold(ability);
         }
