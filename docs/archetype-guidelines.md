@@ -79,7 +79,7 @@ A granted turn is wasted on an ally who can't act with it. `TurnGrantPolicy` dec
 
 **Priorities:**
 
-1. **Blood Oath** on an enemy she can reach and kill this turn, then kill it as soon as possible. After the round's kill reward, extra oaths go only on hard-to-hit enemies (20%+ dodge or parry) she's about to attack.
+1. **Blood Oath** at least once a turn on an enemy she can reach and will attack. The oath stays on the enemy until it dies, so it sets up a later kill reward even when she can't kill it today. Target order: one her best affordable melee attack can probably kill, then the enemy her attacks are aimed at this turn, then the reachable enemy with the least HP. While a sworn enemy she can reach is alive, no new oath; one out of reach doesn't block a new oath. After the round's kill reward, extra oaths go only on hard-to-hit enemies (20%+ dodge or parry) she's about to attack.
 2. **Death From Above as an attack** when the landing touches 2 or more enemies (and the oath target if one exists).
 3. **Death From Above as a gap closer** when the target is in range and a melee attack is still usable after landing.
 4. **Blade Dance** whenever enough enemies are adjacent and no ally is. If an ally blocks it, step to a tile touching enemies and no allies first.
@@ -91,11 +91,9 @@ A granted turn is wasted on an ally who can't act with it. `TurnGrantPolicy` dec
 
 **Not built yet:**
 
-- The end-of-turn "Final marker" step can still cast Blood Oath with leftover AP, outside the oath rules. This was put on hold earlier.
-- Blood Oath is held when no reachable enemy is killable. That stays (see the decision below).
 - Abilities not in the party yet: Captive Audience, Acrobatic Artistry, Veil of Blades, Oath of Vengeance.
 
-> **Decision:** no. Blood Oath only goes on an enemy she can reach and probably kill this turn. The earlier on-hold idea (swear on any enemy she's about to attack before the reward) is dropped.
+> **Decision (revised 2026-10-18):** at least one oath a turn on an enemy she can reach and attack, killable or not, because the oath lasts until the enemy dies. This replaces the 2026-10-17 answer (oath only on an enemy she can kill this turn), which left her swearing no oaths in a whole fight. The leftover-AP step never casts Blood Oath.
 
 > **Decision:** yes, 40% HP stays the line for the end-of-turn move into a crowd.
 
@@ -106,7 +104,7 @@ A granted turn is wasted on an ally who can't act with it. `TurnGrantPolicy` dec
 | Ability | GUID | Rule |
 |---|---|---|
 | Raining Blood | `e299c13f2278479bbd4e23269af5657c` | Blood Phial refill. Only while the phial is empty, only right before a single-target melee attack this turn. 1 AP reserved for it. |
-| Blood Phial (item) | `29dd732891604e3db9913065a7f4e2d0` | Lowest-priority spend. Thrown where the 3×3 pool covers the most enemies (2 each) and allies (1 each). |
+| Blood Phial (item) | `29dd732891604e3db9913065a7f4e2d0` | Lowest-priority spend. Thrown where the 3×3 pool covers the most enemies (2 each) and allies (1 each). Not thrown once no enemies are left. |
 
 **Built:** `RainingBloodPlanner.cs`, `BloodPhialPlanner.cs`.
 
@@ -264,7 +262,7 @@ Answers from 2026-10-17, in question order.
 
 | # | Topic | Decision | Code change |
 |---|---|---|---|
-| 1 | Blood Oath on enemies she can't kill this turn | No | None |
+| 1 | Blood Oath on enemies she can't kill this turn | Revised 2026-10-18: yes, at least one oath a turn on an enemy she can reach and attack | Built |
 | 2 | 40% HP line for the Bladedancer's engagement move | Yes, keep 40% | None |
 | 3 | Rule for Death Waltz | No, generic Heroic Act | None |
 | 4 | Who gets Finest Hour! | The ally who would deal the most damage with a full turn | To build |
@@ -279,6 +277,5 @@ Answers from 2026-10-17, in question order.
 
 ### Still to build (not decided here)
 
-- Argenta: don't move closer to shoot targets she can already hit, and stay out of melee enemies' reach at the end of her turn (proposed, not built).
-- Bladedancer: keep the end-of-turn "Final marker" step from casting Blood Oath outside the oath rules.
+- Ending turns within melee reach in general (Argenta, Cassia): the specific cases are fixed (no closer move for the same targets, cone firing tiles weigh melee reach); a general end-of-turn check is not built.
 - Thordan: the turn strategy's damage estimate still assumes four shots ("Single×4").

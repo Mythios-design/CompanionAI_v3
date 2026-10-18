@@ -162,11 +162,36 @@ namespace CompanionAI_v3.Planning.Planners
         private static float WoundMPBonus(BaseUnitEntity unit)
             => unit != null && _woundMPBonus.TryGetValue(unit.UniqueId, out float mp) ? mp : 0f;
 
-        /// <summary>Her main oath target: the first living enemy she has sworn on, or null.</summary>
+        /// <summary>
+        /// Her main oath target: the most recently sworn living enemy she can reach this turn, else the most recently
+        /// sworn living one, or null. A new oath only goes out when the older ones are out of reach, so the newest is
+        /// the one she's working on.
+        /// </summary>
         public static BaseUnitEntity GetOathTarget(Situation situation)
         {
             var living = GetOathTargets(situation);
-            return living.Count > 0 ? living[0] : null;
+            if (living.Count == 0) return null;
+            float reach = OathReach(situation, out _);
+            for (int i = living.Count - 1; i >= 0; i--)
+                if (CombatAPI.GetDistanceInTiles(situation.Unit, living[i]) <= reach) return living[i];
+            return living[living.Count - 1];
+        }
+
+        /// <summary>How far she can get to attack this turn: melee reach + MP (and the wound MP bonus) + a jump.</summary>
+        private static float OathReach(Situation situation, out string text)
+        {
+            var unit = situation.Unit;
+            float bonusMP = WoundMPBonus(unit);
+            float walk = situation.CurrentMP + bonusMP;
+            float melee = MovementPlanner.GetUnitMeleeRange(unit);
+            float jump = 0f;
+            if (situation.AvailableAttacks != null)
+                foreach (var attack in situation.AvailableAttacks)
+                    if (IsDeathFromAbove(attack) && UsesLeft(attack) > 0)
+                        jump = Math.Max(jump, CombatAPI.GetAbilityRangeInTiles(attack));
+            float reach = melee + walk + jump;
+            text = $"reach {reach:F0} tiles (MP {situation.CurrentMP:F0}{(bonusMP > 0 ? $" +{bonusMP:F0} from wounds" : "")}{(jump > 0 ? $", jump {jump:F0}" : "")})";
+            return reach;
         }
 
         /// <summary>
@@ -237,8 +262,8 @@ namespace CompanionAI_v3.Planning.Planners
 
         /// <summary>
         /// Blood Oath can go on several enemies a turn, once each. The kill reward comes once per round, so:
-        ///  - Reward not yet taken: one oath at a time, on an enemy she can reach and probably kill. While that enemy
-        ///    lives, no other oath.
+        ///  - Reward not yet taken: at least one oath a turn on an enemy she can reach (the oath stays until it dies).
+        ///    While a sworn enemy she can reach lives, no other oath.
         ///  - Reward taken: extra oaths only on the enemy she's about to hit, when its dodge or parry is at least
         ///    <see cref="ExtraOathMinAvoidance"/>%, since the oath's attack can't be dodged or parried.
         /// Each oath costs wounds; the 70% HP gate is applied by the analyzer.
@@ -258,7 +283,10 @@ namespace CompanionAI_v3.Planning.Planners
             string why;
             if (!RewardClaimedThisRound(situation.Unit.UniqueId))
             {
-                if (living.Count > 0) return null;  // the sworn enemy still needs killing first
+                // A sworn enemy she can reach still needs killing first; one out of reach doesn't stop a new oath
+                float reachNow = OathReach(situation, out _);
+                foreach (var sworn in living)
+                    if (CombatAPI.GetDistanceInTiles(situation.Unit, sworn) <= reachNow) return null;
                 target = ChooseOathTarget(situation, oath, cost, out why);
             }
             else
@@ -321,65 +349,74 @@ namespace CompanionAI_v3.Planning.Planners
             return null;
         }
 
-        /// <summary>Reachable this turn and likely to die to her best melee attack; best target score wins.</summary>
+        /// <summary>
+        /// An enemy she can reach this turn. In order: one her best affordable melee attack can probably kill (best
+        /// target score wins), the enemy her attacks are aimed at this turn, then the reachable enemy with the least HP.
+        /// The oath stays on the enemy until it dies, so a target she can't kill today still sets up a later reward.
+        /// </summary>
         private static BaseUnitEntity ChooseOathTarget(Situation situation, AbilityData oath, float oathCost, out string why)
         {
             var unit = situation.Unit;
             float apAfter = situation.CurrentAP - oathCost;
 
-            float bestDamage = 0f;
-            AbilityData bestAttack = null;
+            var melee = new List<AbilityData>();
             foreach (var attack in situation.AvailableAttacks)
             {
                 if (attack?.Weapon == null || !attack.IsMelee || AbilityDatabase.IsGapCloser(attack)) continue;
                 if (CombatAPI.GetAbilityAPCost(attack) > apAfter + 0.01f) continue;
-                float dmg = CombatAPI.EstimateDamage(attack, situation.NearestEnemy ?? unit);
-                if (dmg > bestDamage) { bestDamage = dmg; bestAttack = attack; }
+                melee.Add(attack);
             }
-            if (bestAttack == null)
+            if (melee.Count == 0)
             {
                 why = "no melee attack affordable after the oath";
                 return null;
             }
 
-            float bonusMP = WoundMPBonus(unit);
-            float walk = situation.CurrentMP + bonusMP;
-            float melee = MovementPlanner.GetUnitMeleeRange(unit);
-            float jump = 0f;
-            foreach (var attack in situation.AvailableAttacks)
-            {
-                if (IsDeathFromAbove(attack) && UsesLeft(attack) > 0)
-                    jump = Math.Max(jump, CombatAPI.GetAbilityRangeInTiles(attack));
-            }
-
+            float reach = OathReach(situation, out string reachText);
             var role = situation.CharacterSettings?.Role ?? AIRole.Auto;
             var scoreRole = role == AIRole.Auto ? AIRole.DPS : role;
-            BaseUnitEntity best = null;
-            float bestScore = float.MinValue;
-            int reachable = 0;
+
+            BaseUnitEntity killable = null, lowest = null;
+            float bestScore = float.MinValue, lowestHP = float.MaxValue;
+            string killWith = null;
+            bool bestTargetReachable = false;
             foreach (var enemy in situation.Enemies)
             {
                 if (enemy == null || !enemy.IsConscious || enemy.LifeState.IsDead) continue;
                 if (CombatAPI.IsTargetImmuneToDamage(enemy, unit)) continue;
                 if (IsAlreadySworn(situation, oath, enemy)) continue;
+                if (CombatAPI.GetDistanceInTiles(unit, enemy) > reach) continue;
 
-                float dist = CombatAPI.GetDistanceInTiles(unit, enemy);
-                if (dist > melee + walk + jump) continue;
-                reachable++;
+                if (enemy == situation.BestTarget) bestTargetReachable = true;
+                float hp = CombatAPI.GetActualHP(enemy);
+                if (hp < lowestHP) { lowestHP = hp; lowest = enemy; }
 
                 // The oath's attack can't be dodged or parried, so the estimate is a fair guess at a hit.
-                float dmg = CombatAPI.EstimateDamage(bestAttack, enemy);
-                if (dmg < CombatAPI.GetActualHP(enemy)) continue;
-
+                AbilityData killer = null;
+                foreach (var attack in melee)
+                    if (CombatAPI.EstimateDamage(attack, enemy) >= hp) { killer = attack; break; }
+                if (killer == null) continue;
                 float score = TargetScorer.ScoreEnemy(enemy, situation, scoreRole);
-                if (score > bestScore) { bestScore = score; best = enemy; }
+                if (score > bestScore) { bestScore = score; killable = enemy; killWith = killer.Name; }
             }
 
-            string reach = $"reach {melee + walk + jump:F0} tiles (MP {situation.CurrentMP:F0}{(bonusMP > 0 ? $" +{bonusMP:F0} from wounds" : "")}{(jump > 0 ? $", jump {jump:F0}" : "")})";
-            why = best != null
-                ? $"{best.CharacterName} reachable and {bestAttack.Name} can kill ({reach})"
-                : reachable == 0 ? $"no enemy within {reach}" : $"{reachable} enemies in reach but none killable with {bestAttack.Name}";
-            return best;
+            if (killable != null)
+            {
+                why = $"{killable.CharacterName} reachable and {killWith} can kill ({reachText})";
+                return killable;
+            }
+            if (bestTargetReachable)
+            {
+                why = $"{situation.BestTarget.CharacterName} is this turn's target; the oath stays until it dies ({reachText})";
+                return situation.BestTarget;
+            }
+            if (lowest != null)
+            {
+                why = $"{lowest.CharacterName} has the least HP in reach; the oath stays until it dies ({reachText})";
+                return lowest;
+            }
+            why = $"no enemy within {reachText}";
+            return null;
         }
 
         /// <summary>Death From Above as an attack: land next to the most enemies (at least <see cref="StrikeMinEnemies"/>).</summary>

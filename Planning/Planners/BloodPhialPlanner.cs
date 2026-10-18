@@ -71,6 +71,11 @@ namespace CompanionAI_v3.Planning.Planners
                 LogNotHeld(situation, remainingAP, roleName);
                 return;
             }
+            if (situation.Enemies == null || !situation.Enemies.Exists(e => e != null && e.IsConscious && !e.LifeState.IsDead))
+            {
+                Log.Planning.Info($"[{roleName}] Blood Phial kept: no enemies left");
+                return;
+            }
             try
             {
                 float cost = CombatAPI.GetAbilityAPCost(phial);
