@@ -60,11 +60,13 @@ namespace CompanionAI_v3.Planning.Plans
                 {
                     if (a == null || !AbilityPolicy.EndsWeaponAttacks(a)) continue;
                     string guid = a.Blueprint?.AssetGuid?.ToString();
-                    if (string.IsNullOrEmpty(guid) || excludeAbilityGuids.Contains(guid)) continue;
+                    if (string.IsNullOrEmpty(guid) || excludeAbilityGuids.Contains(AttackPlanner.WeaponCapMarker + guid)) continue;
                     int remaining = WeaponAttackAllowance.Remaining(unit, a, out string why);
                     if (a == ability) allowance = why;
                     if (planned < remaining) continue;
                     excludeAbilityGuids.Add(guid);
+                    // Also marked as capped, so fallbacks that reuse spread-out attacks leave it alone
+                    excludeAbilityGuids.Add(AttackPlanner.WeaponCapMarker + guid);
                     excluded.Add(a.Name);
                 }
             }

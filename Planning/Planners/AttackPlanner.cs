@@ -380,7 +380,9 @@ namespace CompanionAI_v3.Planning.Planners
 
             // ★ v3.5.11: 폴백 로깅
             // ★ v3.6.10: PrimaryAttack 폴백에도 높이 체크 적용
-            if (situation.PrimaryAttack != null)
+            // The fallback may reuse an attack left out to spread attacks over enemies, but not one the game no
+            // longer allows this turn (weapon attack cap)
+            if (situation.PrimaryAttack != null && !IsWeaponCapped(situation.PrimaryAttack, excludeAbilityGuids))
             {
                 // AOE 높이 체크
                 if (CombatAPI.IsPointTargetAbility(situation.PrimaryAttack))
@@ -1879,6 +1881,19 @@ namespace CompanionAI_v3.Planning.Planners
             if (string.IsNullOrEmpty(guid)) return false;
 
             return excludeAbilityGuids.Contains(guid);
+        }
+
+        /// <summary>
+        /// Prefix for exclude-set entries added by the weapon attack cap (BasePlan.ExcludeSpentWeaponAttacks).
+        /// Unlike the plain entries, which only spread attacks over enemies, these mean the game won't allow it.
+        /// </summary>
+        public const string WeaponCapMarker = "weaponcap:";
+
+        public static bool IsWeaponCapped(AbilityData ability, HashSet<string> excludeAbilityGuids)
+        {
+            if (ability == null || excludeAbilityGuids == null || excludeAbilityGuids.Count == 0) return false;
+            var guid = ability.Blueprint?.AssetGuid?.ToString();
+            return !string.IsNullOrEmpty(guid) && excludeAbilityGuids.Contains(WeaponCapMarker + guid);
         }
 
         #endregion

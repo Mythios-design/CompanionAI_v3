@@ -23,7 +23,7 @@ namespace CompanionAI_v3.Planning.Planners
     ///    +1 AP and an extra attack (once per round). Once sworn, that enemy is her target until it dies. After the
     ///    round's reward, extra oaths (once per enemy) go only on hard-to-hit enemies she's about to attack.
     ///  - Death From Above is a free attack when the landing is next to enough enemies. As a plain gap closer it is
-    ///    only used with more than <see cref="GapCloserReserve"/> uses left, or to reach the oath target.
+    ///    used on a target in range when a melee attack can still be used on it after landing.
     /// The MP bonus from wound spending (a common Bladedancer talent) is learned in the fight: the first time she
     /// spends wounds, the MP gained is recorded and used for later oath decisions.
     /// </summary>
@@ -39,9 +39,6 @@ namespace CompanionAI_v3.Planning.Planners
             "bdb0bd56d86a45dc914226ea4704f5f6",  // Spring
             "2fe0f07d130c4af2ab23a9ce75efad5a",  // Targeted
         };
-
-        /// <summary>Uses of Death From Above kept back: only use it as a plain gap closer with more than this.</summary>
-        public const int GapCloserReserve = 3;
 
         /// <summary>Enemies next to the landing tile before a jump is worth it as an attack.</summary>
         public const int StrikeMinEnemies = 2;
@@ -479,23 +476,42 @@ namespace CompanionAI_v3.Planning.Planners
         }
 
         /// <summary>
-        /// Death From Above as a plain gap closer: only with more than <see cref="GapCloserReserve"/> uses left, or to
-        /// reach the oath target (a kill with a normal attack gives a use back).
+        /// Death From Above as a plain gap closer: only when a melee attack can still be used on the target after
+        /// landing (available, and affordable with the AP left after the jump). Whether the target is in reach is the
+        /// gap closer planner's own range and landing check.
         /// </summary>
-        public static bool AllowJumpAsGapCloser(Situation situation, AbilityData ability, BaseUnitEntity target, string roleName)
+        public static bool AllowJumpAsGapCloser(Situation situation, AbilityData ability, BaseUnitEntity target, float remainingAP, string roleName)
         {
             if (!IsDeathFromAbove(ability)) return true;
-            int uses = UsesLeft(ability);
-            if (uses > GapCloserReserve) return true;
-            var oathTarget = GetOathTarget(situation);
-            if (oathTarget != null && target == oathTarget)
+            float apAfter = remainingAP - CombatAPI.GetAbilityAPCost(ability);
+            var followUp = FindFollowUpMelee(situation, ability, apAfter);
+            if (followUp != null)
             {
-                Log.Planning.Info($"[{roleName}] Death From Above to reach oath target {target.CharacterName} ({uses} uses left)");
+                if (Main.IsDebugEnabled) Log.Planning.Debug($"[{roleName}] Death From Above to reach {target?.CharacterName}: {followUp.Name} " +
+                    $"({CombatAPI.GetEffectiveAPCost(followUp):F0} AP) usable after landing ({UsesLeft(ability)} uses left)");
                 return true;
             }
             if (Main.IsDebugEnabled)
-                Log.Planning.Debug($"[{roleName}] Death From Above kept back as gap closer -> {target?.CharacterName} ({uses} uses left, need more than {GapCloserReserve})");
+                Log.Planning.Debug($"[{roleName}] Death From Above kept back as gap closer -> {target?.CharacterName}: no melee attack usable after landing (AP after jump {apAfter:F1})");
             return false;
+        }
+
+        /// <summary>The cheapest available melee attack (not a jump) affordable with this AP, else null.</summary>
+        private static AbilityData FindFollowUpMelee(Situation situation, AbilityData jump, float apAfter)
+        {
+            AbilityData best = null;
+            float bestCost = float.MaxValue;
+            if (situation?.AvailableAttacks == null) return null;
+            foreach (var a in situation.AvailableAttacks)
+            {
+                if (a == null || a == jump || !a.IsMelee || a.Blueprint?.CanTargetEnemies != true) continue;
+                if (IsDeathFromAbove(a) || AbilityDatabase.IsGapCloser(a)) continue;
+                float cost = CombatAPI.GetEffectiveAPCost(a);
+                if (cost > apAfter + 0.01f || cost >= bestCost) continue;
+                best = a;
+                bestCost = cost;
+            }
+            return best;
         }
 
         /// <summary>Landing tile bonus for Death From Above: more enemies hit on landing, and next to the oath target.</summary>

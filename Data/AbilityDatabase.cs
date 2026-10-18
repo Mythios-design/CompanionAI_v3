@@ -1344,7 +1344,7 @@ namespace CompanionAI_v3.Data
         }
 
         // ─── ★ v3.28.0: 아키타입 전술용 GUID 헬퍼 ─────────────────────────
-        private const string BRING_IT_DOWN_GUID = "f6998735d21d42f7b23afe1485735f73";
+        private const string BRING_IT_DOWN_GUID = "5bfccf14d8604ae1a041fb347fb8f19f";  // LeaderKeepFightingAbility
         private const string EXPOSE_WEAKNESS_GUID = "197b8a8a12b0442db7ffee1067cf3d97";
 
         /// <summary>BringItDown 능력인지 확인 (Officer 아키타입 전술용)</summary>
