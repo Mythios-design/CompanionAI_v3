@@ -79,7 +79,7 @@ A granted turn is wasted on an ally who can't act with it. `TurnGrantPolicy` dec
 
 **Priorities:**
 
-1. **Blood Oath** only right before an attack that should kill: on the lowest-HP enemy one of her affordable melee attacks should kill, hittable from where she stands if she's engaged, otherwise within her reach this turn. At most one oath a turn, and none while a sworn enemy she can reach is alive. Her attacks (single-target, Brutal Strike's aim, kill sequences) go at the sworn enemy. No HP limit on casting it.
+1. **Blood Oath** only right before an attack that should kill: on the lowest-HP enemy one of her affordable melee attacks can kill on its best damage roll (the oath's attack can't be dodged or parried), hittable from where she stands if she's engaged, otherwise within her reach this turn. At most one oath a turn, and none while a sworn enemy she can reach is alive. Her attacks (single-target, Brutal Strike's aim, kill sequences) go at the sworn enemy. No HP limit on casting it.
 2. **Death From Above as an attack** when the landing touches 2 or more enemies (and the oath target if one exists).
 3. **Death From Above as a gap closer** when the target is in range and a melee attack is still usable after landing.
 4. **Blade Dance** whenever enough enemies are adjacent and no ally is. If an ally blocks it, step to a tile touching enemies and no allies first.
@@ -93,7 +93,7 @@ A granted turn is wasted on an ally who can't act with it. `TurnGrantPolicy` dec
 
 - Abilities not in the party yet: Captive Audience, Acrobatic Artistry, Veil of Blades, Oath of Vengeance.
 
-> **Decision (final, 2026-10-18):** option A. The game pays the oath back only if her *next* attack on the sworn enemy kills it, and each oath costs 14 to 28% of her HP. So she swears only on the lowest-HP enemy her next attack should kill, at most once a turn, and attacks it next. Earlier the same day the rule was "an oath every turn on any enemy in reach" with no HP limit; in tests that cost her up to 55% HP in one turn with nothing back. No HP limit. The leftover-AP step never casts Blood Oath.
+> **Decision (final, 2026-10-18):** option A. The game pays the oath back only if her *next* attack on the sworn enemy kills it, and each oath costs 14 to 28% of her HP. So she swears only on the lowest-HP enemy her next attack can kill, at most once a turn, and attacks it next. "Can kill" means on her best damage roll, not her average (changed after a fight where her average hit never reached any enemy's HP and she swore no oath). Earlier the same day the rule was "an oath every turn on any enemy in reach" with no HP limit; in tests that cost her up to 55% HP in one turn with nothing back. No HP limit. The leftover-AP step never casts Blood Oath.
 
 > **Decision:** yes, 40% HP stays the line for the end-of-turn move into a crowd.
 
@@ -262,7 +262,7 @@ Answers from 2026-10-17, in question order.
 
 | # | Topic | Decision | Code change |
 |---|---|---|---|
-| 1 | Blood Oath on enemies she can't kill this turn | No (final 2026-10-18): only on the lowest-HP enemy her next attack should kill, once a turn, attacked next, no HP limit | Built |
+| 1 | Blood Oath on enemies she can't kill this turn | No (final 2026-10-18): only on the lowest-HP enemy her next attack can kill on a top roll, once a turn, attacked next, no HP limit | Built |
 | 2 | 40% HP line for the Bladedancer's engagement move | Yes, keep 40% | None |
 | 3 | Rule for Death Waltz | No, generic Heroic Act | None |
 | 4 | Who gets Finest Hour! | The ally who would deal the most damage with a full turn | To build |

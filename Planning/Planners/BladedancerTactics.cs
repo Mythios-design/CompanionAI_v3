@@ -261,7 +261,7 @@ namespace CompanionAI_v3.Planning.Planners
         /// Blood Oath pays off only when her next attack on the sworn enemy kills it (heal, +1 AP and an extra attack,
         /// the last two once per round); otherwise the wounds are spent for nothing. So:
         ///  - At most one oath a turn, and none while a sworn enemy she can reach is still alive.
-        ///  - Only on an enemy her next attack should kill: the lowest-HP one (see <see cref="ChooseOathTarget"/>).
+        ///  - Only on an enemy her next attack can kill on its best damage roll: the lowest-HP one (see <see cref="ChooseOathTarget"/>).
         ///    Her attacks then go at that enemy (oath target priority in the analyzer and the attack planner).
         /// No HP limit, since the cost can't kill her and the kill heals her.
         /// </summary>
@@ -302,10 +302,10 @@ namespace CompanionAI_v3.Planning.Planners
         }
 
         /// <summary>
-        /// The lowest-HP enemy that one of her affordable melee attacks should kill (ties: best target score). It must
+        /// The lowest-HP enemy that one of her affordable melee attacks can kill on its best damage roll (ties: best
+        /// target score). A good roll is enough because the oath's attack can't be dodged or parried. It must
         /// be hittable from where she stands when she's engaged (walking away would draw attacks of opportunity and the
         /// "attack before moving" rule keeps her on the adjacent enemy); otherwise anywhere within her reach this turn.
-        /// The oath's attack can't be dodged or parried, so the damage estimate is a fair guess at a hit.
         /// </summary>
         private static BaseUnitEntity ChooseOathTarget(Situation situation, AbilityData oath, float apAfterOath, out string why)
         {
@@ -345,7 +345,7 @@ namespace CompanionAI_v3.Planning.Planners
                 if (hp > bestHP + 0.01f) continue;
                 AbilityData killer = null;
                 foreach (var attack in melee)
-                    if (CombatAPI.EstimateDamage(attack, enemy) >= hp) { killer = attack; break; }
+                    if (CombatAPI.GetDamagePrediction(attack, enemy).MaxDamage >= hp) { killer = attack; break; }
                 if (killer == null) continue;
 
                 float score = TargetScorer.ScoreEnemy(enemy, situation, scoreRole);
@@ -353,8 +353,8 @@ namespace CompanionAI_v3.Planning.Planners
             }
 
             why = best != null
-                ? $"{best.CharacterName} has the least HP ({bestHP:F0}) of the enemies {killWith} should kill, {where}"
-                : inReach == 0 ? $"no enemy {where}" : $"{inReach} enemies {where}, none her next attack should kill";
+                ? $"{best.CharacterName} has the least HP ({bestHP:F0}) of the enemies {killWith} can kill on a top roll, {where}"
+                : inReach == 0 ? $"no enemy {where}" : $"{inReach} enemies {where}, none her next attack can kill even on a top roll";
             return best;
         }
 
