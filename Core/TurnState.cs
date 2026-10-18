@@ -283,6 +283,7 @@ namespace CompanionAI_v3.Core
             if (success)
             {
                 Planning.Planners.BladedancerTactics.OnActionExecuted(Unit, action);
+                Data.OncePerTurnAbilities.OnActionExecuted(Unit, action);
 
                 ConsecutiveFailures = 0;
 

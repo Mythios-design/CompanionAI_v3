@@ -82,7 +82,7 @@ namespace CompanionAI_v3.GameInterface
 
         private static BlueprintAbilityGroup FindWeaponAttackGroup(AbilityData ability)
         {
-            var groups = ability.AbilityGroups;
+            var groups = ability.Blueprint?.AbilityGroups;
             if (groups == null) return null;
             foreach (var g in groups)
                 if (g != null && g.name == WeaponAttackGroupName) return g;

@@ -198,9 +198,15 @@ namespace CompanionAI_v3.Planning.Plans
                 prioritizedTargets.AddRange(acted);
             }
 
+            // Bring It Down! (and Voice of Command paired with it) goes before every other ally buff
+            var officerOrder = OfficerOrders.Plan(situation, ref remainingAP, prioritizedTargets,
+                plannedTurnGrantTargetIds, plannedBuffTargetPairs, plannedAbilityUseCounts, RoleName);
+            if (officerOrder != null) return officerOrder;
+
             foreach (var buff in situation.AvailableBuffs)
             {
                 if (buff.Blueprint?.CanTargetFriends != true) continue;
+                if (OfficerOrders.Handles(buff)) continue;
 
                 // ★ v3.40.4: 공격 능력이 아군 버프로 잘못 사용되는 것 방지
                 // 무기 능력(Weapon != null)은 공격 → 아군에게 사용하면 피해를 입힘
@@ -223,6 +229,11 @@ namespace CompanionAI_v3.Planning.Plans
                 if (plannedAbilityUseCounts != null && !string.IsNullOrEmpty(buffGuid))
                 {
                     plannedAbilityUseCounts.TryGetValue(buffGuid, out int plannedUses);
+                    if (plannedUses > 0 && OncePerTurnAbilities.IsOncePerTurn(buff))
+                    {
+                        if (Main.IsDebugEnabled) Log.Planning.Debug($"[{RoleName}] Skip {buff.Name}: once per turn and already planned");
+                        continue;
+                    }
                     if (plannedUses > 0)
                     {
                         try
@@ -241,32 +252,7 @@ namespace CompanionAI_v3.Planning.Plans
                 // ★ v3.7.87: 턴 전달 능력인지 확인 (쳐부숴라 등)
                 bool isTurnGrant = AbilityDatabase.IsTurnGrantAbility(buff);
 
-                // ★ v3.28.0: Officer BringItDown → 캐리 유닛 최우선
-                // BringItDown은 아군에게 사용하는 공격 강화 버프 → DPS 캐리에게 집중
                 var targetList = prioritizedTargets;
-                if (AbilityDatabase.IsBringItDown(buff))
-                {
-                    string carryId = TeamBlackboard.Instance.HeroicActPriorityUnitId;
-                    if (carryId != null)
-                    {
-                        BaseUnitEntity carryUnit = null;
-                        foreach (var t in prioritizedTargets)
-                        {
-                            if (t.UniqueId == carryId) { carryUnit = t; break; }
-                        }
-                        if (carryUnit != null)
-                        {
-                            // 캐리 유닛을 맨 앞으로 (나머지 순서 유지)
-                            targetList = new List<BaseUnitEntity> { carryUnit };
-                            foreach (var t in prioritizedTargets)
-                            {
-                                if (t != carryUnit) targetList.Add(t);
-                            }
-                            if (Main.IsDebugEnabled)
-                                Log.Planning.Debug($"[{RoleName}] BringItDown: carry unit {carryUnit.CharacterName} prioritized");
-                        }
-                    }
-                }
 
                 foreach (var target in targetList)
                 {

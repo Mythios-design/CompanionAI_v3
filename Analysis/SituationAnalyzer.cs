@@ -147,6 +147,7 @@ namespace CompanionAI_v3.Analysis
             situation.CurrentAP = CombatAPI.GetCurrentAP(unit);
             situation.CurrentMP = CombatAPI.GetCurrentMP(unit);
             Planning.Planners.BladedancerTactics.ObserveMP(unit, situation.CurrentMP);
+            Data.OncePerTurnAbilities.Observe(unit);
             // MovementBlockedThisTurn: 이동 설정 실패 반복 후 이번 턴 이동 계획 차단 (TurnOrchestrator.NotifyMoveSetupFailed).
             //   플래너는 CanMove 로 이동 여부를 판단하므로 여기서 미러해 제자리 플랜을 유도한다.
             situation.CanMove = situation.CurrentMP > 0 && CombatAPI.CanMove(unit)
