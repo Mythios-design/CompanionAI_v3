@@ -480,9 +480,24 @@ namespace CompanionAI_v3.Planning.Planners
         /// landing (available, and affordable with the AP left after the jump). Whether the target is in reach is the
         /// gap closer planner's own range and landing check.
         /// </summary>
-        public static bool AllowJumpAsGapCloser(Situation situation, AbilityData ability, BaseUnitEntity target, float remainingAP, string roleName)
+        public static bool AllowJumpAsGapCloser(Situation situation, AbilityData ability, BaseUnitEntity target, float remainingAP,
+            float remainingMP, string roleName)
         {
             if (!IsDeathFromAbove(ability)) return true;
+
+            // Walk first: a target within walking reach is reached on foot, keeping the charge. The jump stays allowed
+            // when an enemy is already next to her, since walking away would provoke attacks of opportunity.
+            if (target != null && !CombatAPI.IsInThreateningArea(situation.Unit))
+            {
+                float dist = CombatAPI.GetDistanceInTiles(situation.Unit, target);
+                float reach = MovementPlanner.GetUnitMeleeRange(situation.Unit);
+                if (dist <= remainingMP + reach)
+                {
+                    if (Main.IsDebugEnabled)
+                        Log.Planning.Debug($"[{roleName}] Death From Above kept back -> {target.CharacterName}: reachable on foot ({dist:F1} <= MP {remainingMP:F1} + reach {reach:F1})");
+                    return false;
+                }
+            }
             float apAfter = remainingAP - CombatAPI.GetAbilityAPCost(ability);
             var followUp = FindFollowUpMelee(situation, ability, apAfter);
             if (followUp != null)

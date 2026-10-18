@@ -287,7 +287,7 @@ namespace CompanionAI_v3.Planning.Planners
 
                 foreach (var candidateTarget in targetsToTry)
                 {
-                    if (!BladedancerTactics.AllowJumpAsGapCloser(situation, gapCloser, candidateTarget, remainingAP, roleName)) continue;
+                    if (!BladedancerTactics.AllowJumpAsGapCloser(situation, gapCloser, candidateTarget, remainingAP, remainingMP, roleName)) continue;
 
                     // ★ v3.5.34: MP 비용 체크 (실제 타일 경로 기반)
                     // ★ v3.9.22: MP=0이어도 GapCloser 시도 허용 — 게임 자체 경로 검증 + CanUseAbilityOn이 최종 판정
@@ -423,7 +423,7 @@ namespace CompanionAI_v3.Planning.Planners
                     foreach (var candidateTarget in situation.Enemies)
                     {
                         if (candidateTarget == null || !candidateTarget.IsConscious) continue;
-                        if (!BladedancerTactics.AllowJumpAsGapCloser(situation, gapCloser, candidateTarget, remainingAP, roleName)) continue;
+                        if (!BladedancerTactics.AllowJumpAsGapCloser(situation, gapCloser, candidateTarget, remainingAP, remainingMP, roleName)) continue;
                         float dist = CombatCache.GetDistanceInTiles(situation.Unit, candidateTarget);
 
                         // 직접 점프로 도달 가능했으면 이미 위에서 처리됨
