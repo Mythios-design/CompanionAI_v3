@@ -775,6 +775,7 @@ namespace CompanionAI_v3.Planning.Plans
             // (Warp Relay로 계획된 사이킥 공격이 직접 공격으로 또 계획되는 것 방지)
             // AoE phase 앞에서 선언 — Phase 4.96~4.97 AoE GUID 도 등록해 같은 턴 중복 시전 방지
             var plannedAbilityGuids = new HashSet<string>(usedKeystoneAbilityGuids);
+            ExcludeOncePerTurn(heroicAction?.Ability, situation.Unit, plannedAbilityGuids);
 
             // Phase 4.96: Melee AoE (근접 오버시어만)
             if (!situation.PrefersRanged && remainingAP >= 1f)

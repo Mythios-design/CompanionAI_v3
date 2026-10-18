@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Kingmaker.EntitySystem.Entities;
 using Kingmaker.UnitLogic.Abilities;
 using Kingmaker.Utility;
 using CompanionAI_v3.Analysis;
@@ -47,6 +48,7 @@ namespace CompanionAI_v3.Planning.Plans
             var ability = action?.Ability;
             var unit = situation?.Unit;
             if (ability == null || excludeAbilityGuids == null || unit == null) return;
+            ExcludeOncePerTurn(ability, unit, excludeAbilityGuids);
             if (!AbilityPolicy.EndsWeaponAttacks(ability)) return;
 
             int planned = ++_plannedWeaponAttacks.GetOrCreateValue(excludeAbilityGuids).Value;
@@ -73,6 +75,21 @@ namespace CompanionAI_v3.Planning.Plans
             if (Main.IsDebugEnabled)
                 Log.Planning.Debug($"[Plan] {unit.CharacterName}: weapon attack #{planned} planned ({ability.Name}, allowed: {allowance ?? "n/a"})" +
                     (excluded.Count > 0 ? $" - leaving out {string.Join(", ", excluded)}" : ""));
+        }
+
+        /// <summary>
+        /// A Heroic Act, or an ability seen going on cooldown after one cast (OncePerTurnAbilities), is left out of
+        /// later picks once planned. Without this a 0 AP ultimate on the last enemy gets re-picked by the
+        /// "attack the only target again" rule until the loop runs out.
+        /// </summary>
+        protected static void ExcludeOncePerTurn(AbilityData ability, BaseUnitEntity unit, HashSet<string> excludeAbilityGuids)
+        {
+            if (ability == null || excludeAbilityGuids == null) return;
+            if (!AbilityDatabase.IsHeroicAct(ability) && !OncePerTurnAbilities.IsOncePerTurn(ability)) return;
+            string guid = ability.Blueprint?.AssetGuid?.ToString();
+            if (string.IsNullOrEmpty(guid) || !excludeAbilityGuids.Add(guid)) return;
+            if (Main.IsDebugEnabled)
+                Log.Planning.Debug($"[Plan] {unit?.CharacterName}: {ability.Name} planned - once per turn, leaving it out of later picks");
         }
 
         /// <summary>
@@ -213,6 +230,9 @@ namespace CompanionAI_v3.Planning.Plans
 
                     // 능력 자체도 최근 사용 여부 확인
                     if (AbilityUsageTracker.WasUsedRecently(unitId, abilityId, 1000)) continue;
+
+                    // Blood Oath only goes where the Bladedancer rules put it (an enemy she can reach and kill)
+                    if (Planners.BladedancerTactics.IsBloodOath(marker)) continue;
 
                     // ★ v3.110.7: 이 턴 이미 계획된 능력 스킵
                     if (_plannedBuffGuids.Contains(abilityId))

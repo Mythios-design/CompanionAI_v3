@@ -41,13 +41,21 @@ namespace CompanionAI_v3.Planning.Planners
             try
             {
                 float cost = CombatAPI.GetAbilityAPCost(phial);
-                if (cost > remainingAP + 0.01f) return;
+                if (cost > remainingAP + 0.01f)
+                {
+                    Log.Planning.Info($"[{roleName}] Blood Phial kept: costs {cost:F0} AP, {remainingAP:F0} left");
+                    return;
+                }
 
                 Vector3 from = situation.Unit.Position;
                 foreach (var a in actions)
                     if (a.Type == ActionType.Move && a.MoveDestination.HasValue) from = a.MoveDestination.Value;
                 var fromNode = from.GetNearestNodeXZ() as CustomGridNodeBase;
-                if (fromNode == null) return;
+                if (fromNode == null)
+                {
+                    Log.Planning.Info($"[{roleName}] Blood Phial kept: no grid node at the throwing position");
+                    return;
+                }
 
                 if (!FindBestCell(phial, situation, fromNode, out var cell, out int enemies, out int allies, out string why))
                 {

@@ -374,6 +374,9 @@ namespace CompanionAI_v3.Analysis
 
             // ★ v3.9.26: NormalHittableCount — DangerousAoE 제외한 일반 공격 hittable 수
             int normalHittableCount = 0;
+            // Enemies only a weapon area attack reaches (a shotgun cone): counted as normal targets when the weapon in
+            // hand has no other attack, so a shotgun user fires from where she stands instead of stepping around.
+            int areaWeaponHittableCount = 0;
 
             // 각 적에 대해 어떤 공격이든 사용 가능한지 확인
             foreach (var enemy in situation.Enemies)
@@ -390,6 +393,7 @@ namespace CompanionAI_v3.Analysis
                 var targetWrapper = new TargetWrapper(enemy);
                 bool isHittable = false;
                 bool isHittableByNormal = false;  // ★ v3.9.26: 일반 공격으로 hittable
+                bool isHittableByAreaWeapon = false;
                 string hittableBy = null;
 
                 foreach (var attack in attacks)
@@ -507,6 +511,7 @@ namespace CompanionAI_v3.Analysis
 
                         isHittable = true;
                         if (!isDangerousAoE) isHittableByNormal = true;
+                        else if (attack.Weapon != null) isHittableByAreaWeapon = true;
                         hittableBy = $"{attack.Name} (AOE r={patternInfo.Radius:F0})";
                         break;
                     }
@@ -524,6 +529,7 @@ namespace CompanionAI_v3.Analysis
                         }
                         isHittable = true;
                         if (!isDangerousAoE) isHittableByNormal = true;
+                        else if (attack.Weapon != null) isHittableByAreaWeapon = true;
                         hittableBy = attack.Name;
                         break;
                     }
@@ -540,6 +546,7 @@ namespace CompanionAI_v3.Analysis
                 {
                     situation.HittableEnemies.Add(enemy);
                     if (isHittableByNormal) normalHittableCount++;
+                    else if (isHittableByAreaWeapon) areaWeaponHittableCount++;
                     Log.Analysis.Debug($"[Analyzer] {enemy.CharacterName} hittable by {hittableBy}{(isHittableByNormal ? "" : " (DangerousAoE only)")}");
                 }
             }
@@ -643,6 +650,11 @@ namespace CompanionAI_v3.Analysis
 
             // NormalHittableCount — DangerousAoE 제외한 일반 공격 hittable 수. 폴백이 적을 추가한 뒤
             // 최종 집계해야 한다(폴백 전에 set 하면 폴백 추가분이 누락되어 hittable=0 으로 오판).
+            if (areaWeaponHittableCount > 0 && !HasNormalWeaponAttack(attacks))
+            {
+                Log.Analysis.Debug($"[Analyzer] {unit.CharacterName}: weapon in hand only has area attacks - counting {areaWeaponHittableCount} of its targets as normal");
+                normalHittableCount += areaWeaponHittableCount;
+            }
             situation.NormalHittableCount = normalHittableCount;
 
             // ★ v3.1.21: 최적 타겟 선택 - TargetScorer 기반 Role별 가중치 적용
@@ -1618,6 +1630,18 @@ namespace CompanionAI_v3.Analysis
         #endregion
 
         #region Helper Methods
+
+        /// <summary>True when the attack list holds a weapon attack that isn't an area (DangerousAoE) attack.</summary>
+        private static bool HasNormalWeaponAttack(List<AbilityData> attacks)
+        {
+            if (attacks == null) return false;
+            foreach (var a in attacks)
+            {
+                if (a?.Weapon == null || AbilityDatabase.IsReload(a)) continue;
+                if (!AbilityDatabase.IsDangerousAoE(a)) return true;
+            }
+            return false;
+        }
 
         // ★ v3.0.46: 미사용 메서드 제거 - UtilityScorer.SelectBestTarget으로 대체됨
         // private BaseUnitEntity SelectBestTarget(Situation situation, BaseUnitEntity unit) { ... }

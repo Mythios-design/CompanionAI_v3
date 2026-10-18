@@ -249,6 +249,7 @@ namespace CompanionAI_v3.Planning.Plans
             // ★ v3.5.79: Phase 3에서 킬 시퀀스 타겟을 Phase 5와 공유하기 위해 미리 초기화
             var plannedTargetIds = new HashSet<string>();
             var plannedAbilityGuids = new HashSet<string>();
+            ExcludeOncePerTurn(heroicAction?.Ability, situation.Unit, plannedAbilityGuids);
             BaseUnitEntity killSequenceTarget = null;  // 킬 시퀀스로 계획된 타겟
 
             // ★ v3.10.0: Kill Seq vs AoE 경쟁 — AoE에 밀려 보류된 킬 시퀀스

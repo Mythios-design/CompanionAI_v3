@@ -113,9 +113,11 @@ namespace CompanionAI_v3.Planning.Planners
             }
 
             float budget = remainingAP;
-            bool useExpose = Usable(expose, target, unit, shootFrom, ref budget);
-            bool useAnalyse = useExpose && Usable(analyse, target, unit, shootFrom, ref budget);
-            bool useSentence = Usable(sentence, target, unit, shootFrom, ref budget);
+            var skipped = new List<string>();
+            bool useExpose = Usable(expose, target, unit, shootFrom, ref budget, skipped);
+            bool useAnalyse = useExpose && Usable(analyse, target, unit, shootFrom, ref budget, skipped);
+            if (!useExpose && analyse != null) skipped.Add($"{analyse.Name} (only used with Expose Weakness)");
+            bool useSentence = Usable(sentence, target, unit, shootFrom, ref budget, skipped);
 
             var inserted = new List<PlannedAction>();
             if (useAnalyse) inserted.Add(PlannedAction.Debuff(analyse, target, $"Set up {target.CharacterName}: exploits", CombatAPI.GetAbilityAPCost(analyse)));
@@ -140,33 +142,41 @@ namespace CompanionAI_v3.Planning.Planners
                 }
             }
 
-            if (inserted.Count > 0 || removed > 0 || extra != null)
+            if (inserted.Count > 0 || removed > 0 || extra != null || skipped.Count > 0)
             {
                 var names = new List<string>();
                 foreach (var a in inserted) names.Add(a.Ability.Name);
                 Log.Planning.Info($"[{roleName}] Operative turn on {target.CharacterName}: " +
-                    (names.Count > 0 ? string.Join(" -> ", names) + " -> " : "") + $"{shot.Ability.Name}{extra} (AP left {remainingAP:F1})");
+                    (names.Count > 0 ? string.Join(" -> ", names) + " -> " : "") + $"{shot.Ability.Name}{extra} (AP left {remainingAP:F1})" +
+                    (skipped.Count > 0 ? $"; skipped: {string.Join(", ", skipped)}" : ""));
             }
         }
 
         /// <summary>Affordable, not already on the target, and castable on it (Death Sentence within range of the shooting tile).</summary>
-        private static bool Usable(AbilityData ability, BaseUnitEntity target, BaseUnitEntity unit, Vector3 shootFrom, ref float budget)
+        private static bool Usable(AbilityData ability, BaseUnitEntity target, BaseUnitEntity unit, Vector3 shootFrom, ref float budget, List<string> skipped = null)
         {
             if (ability == null || target == null) return false;
             float cost = CombatAPI.GetAbilityAPCost(ability);
-            if (cost > budget + 0.01f) return false;
-            if (AllyStateCache.HasBuff(target, ability)) return false;
-            if (CombatAPI.IsTargetImmuneToDamage(target, unit) && KindOf(ability) == Kind.DeathSentence) return false;
+            if (cost > budget + 0.01f) return Skip(skipped, ability, $"needs {cost:F0} AP, {budget:F0} left");
+            if (AllyStateCache.HasBuff(target, ability)) return Skip(skipped, ability, "already on the target");
+            if (CombatAPI.IsTargetImmuneToDamage(target, unit) && KindOf(ability) == Kind.DeathSentence) return Skip(skipped, ability, "target immune to damage");
 
             float range = CombatAPI.GetAbilityRangeInTiles(ability);
-            if (range > 0 && range < 1000 && CombatAPI.GetDistanceInTiles(shootFrom, target) > range) return false;
+            float dist = CombatAPI.GetDistanceInTiles(shootFrom, target);
+            if (range > 0 && range < 1000 && dist > range) return Skip(skipped, ability, $"out of range ({dist:F0} > {range:F0} tiles)");
             // Range is checked from the shooting tile above; line of sight and other rules from where he stands now
             if (CombatAPI.MetersToTiles(Vector3.Distance(shootFrom, unit.Position)) < 0.5f
-                && !CombatAPI.CanUseAbilityOn(ability, new TargetWrapper(target), out _))
-                return false;
+                && !CombatAPI.CanUseAbilityOn(ability, new TargetWrapper(target), out string reason))
+                return Skip(skipped, ability, reason);
 
             budget -= cost;
             return true;
+        }
+
+        private static bool Skip(List<string> skipped, AbilityData ability, string why)
+        {
+            skipped?.Add($"{ability.Name} ({why})");
+            return false;
         }
     }
 }

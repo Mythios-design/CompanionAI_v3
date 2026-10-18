@@ -365,6 +365,8 @@ namespace CompanionAI_v3.Analysis
             //   다중 공격은 모든 발이 적중해야 누적 데미지가 HP 도달 → 체인 곱셈 모델
             float chainKillProb = 1f;
             var usedAbilities = new HashSet<string>();
+            // Weapon attack group (Single Shot, Deadeye Shot and the like): one normal attack a turn plus any free uses
+            int weaponAttacks = 0;
 
             foreach (var item in sortedAttacks)
             {
@@ -380,6 +382,14 @@ namespace CompanionAI_v3.Analysis
                 string abilityId = item.Attack.Blueprint?.AssetGuid?.ToString() ?? item.Attack.Name;
                 if (usedAbilities.Contains(abilityId))
                     continue;
+
+                bool isWeaponAttack = Planning.Planners.AbilityPolicy.EndsWeaponAttacks(item.Attack);
+                if (isWeaponAttack && weaponAttacks >= WeaponAttackAllowance.Remaining(situation.Unit, item.Attack, out _))
+                {
+                    Log.Analysis.Debug($"[KillSimulator] {item.Attack.Name} left out: weapon attacks for this turn used up");
+                    continue;
+                }
+                if (isWeaponAttack) weaponAttacks++;
 
                 float thisHit = GetHitChance01(situation.Unit, target, item.Attack);
                 chainKillProb *= thisHit;
