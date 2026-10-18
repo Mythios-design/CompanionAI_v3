@@ -46,9 +46,6 @@ namespace CompanionAI_v3.Planning.Planners
         private const float AdjacentTiles = 1.5f;
         private const int MaxLandingChecks = 12;
 
-        /// <summary>After the round's kill reward, extra oaths only go on enemies this hard to hit (dodge or parry %).</summary>
-        public const int ExtraOathMinAvoidance = 20;
-
         // Per combat
         // Enemies sworn by each Bladedancer, in order: the first living one is her main target
         private static readonly Dictionary<string, List<string>> _oathTargets = new Dictionary<string, List<string>>();
@@ -261,12 +258,12 @@ namespace CompanionAI_v3.Planning.Planners
         }
 
         /// <summary>
-        /// Blood Oath can go on several enemies a turn, once each. The kill reward comes once per round, so:
-        ///  - Reward not yet taken: at least one oath a turn on an enemy she can reach (the oath stays until it dies).
-        ///    While a sworn enemy she can reach lives, no other oath.
-        ///  - Reward taken: extra oaths only on the enemy she's about to hit, when its dodge or parry is at least
-        ///    <see cref="ExtraOathMinAvoidance"/>%, since the oath's attack can't be dodged or parried.
-        /// Each oath costs wounds; there is no HP limit, since the cost can't kill her and the kill heals her.
+        /// Blood Oath pays off only when her next attack on the sworn enemy kills it (heal, +1 AP and an extra attack,
+        /// the last two once per round); otherwise the wounds are spent for nothing. So:
+        ///  - At most one oath a turn, and none while a sworn enemy she can reach is still alive.
+        ///  - Only on an enemy her next attack should kill: the lowest-HP one (see <see cref="ChooseOathTarget"/>).
+        ///    Her attacks then go at that enemy (oath target priority in the analyzer and the attack planner).
+        /// No HP limit, since the cost can't kill her and the kill heals her.
         /// </summary>
         private static PlannedAction PlanBloodOath(Situation situation, ref float remainingAP, string roleName)
         {
@@ -278,21 +275,16 @@ namespace CompanionAI_v3.Planning.Planners
             float cost = CombatAPI.GetAbilityAPCost(oath);
             if (cost > remainingAP) return null;
 
-            var living = GetOathTargets(situation);
-            BaseUnitEntity target;
-            string why;
-            if (!RewardClaimedThisRound(situation.Unit.UniqueId))
+            if (SwornThisRound(situation.Unit.UniqueId).Count > 0)
             {
-                // A sworn enemy she can reach still needs killing first; one out of reach doesn't stop a new oath
-                float reachNow = OathReach(situation, out _);
-                foreach (var sworn in living)
-                    if (CombatAPI.GetDistanceInTiles(situation.Unit, sworn) <= reachNow) return null;
-                target = ChooseOathTarget(situation, oath, cost, out why);
+                if (Main.IsDebugEnabled) Log.Planning.Debug($"[{roleName}] Blood Oath held: already sworn this turn");
+                return null;
             }
-            else
-            {
-                target = ChooseExtraOathTarget(situation, oath, out why);
-            }
+            float reachNow = OathReach(situation, out _);
+            foreach (var sworn in GetOathTargets(situation))
+                if (CombatAPI.GetDistanceInTiles(situation.Unit, sworn) <= reachNow) return null;  // that one still needs killing
+
+            var target = ChooseOathTarget(situation, oath, remainingAP - cost, out string why);
             if (target == null)
             {
                 Log.Planning.Info($"[{roleName}] Blood Oath held: {why}");
@@ -310,60 +302,19 @@ namespace CompanionAI_v3.Planning.Planners
         }
 
         /// <summary>
-        /// After the round's reward: the enemy she's about to hit (one she can hit now, best target first), if it's
-        /// hard enough to hit that "can't be dodged or parried" is worth the wounds.
+        /// The lowest-HP enemy that one of her affordable melee attacks should kill (ties: best target score). It must
+        /// be hittable from where she stands when she's engaged (walking away would draw attacks of opportunity and the
+        /// "attack before moving" rule keeps her on the adjacent enemy); otherwise anywhere within her reach this turn.
+        /// The oath's attack can't be dodged or parried, so the damage estimate is a fair guess at a hit.
         /// </summary>
-        private static BaseUnitEntity ChooseExtraOathTarget(Situation situation, AbilityData oath, out string why)
+        private static BaseUnitEntity ChooseOathTarget(Situation situation, AbilityData oath, float apAfterOath, out string why)
         {
             var unit = situation.Unit;
-            AbilityData melee = null;
-            foreach (var attack in situation.AvailableAttacks)
-            {
-                if (attack?.Weapon != null && attack.IsMelee && !AbilityDatabase.IsGapCloser(attack)) { melee = attack; break; }
-            }
-            if (melee == null || situation.HittableEnemies == null || situation.HittableEnemies.Count == 0)
-            {
-                why = "kill reward already taken this round and no enemy in reach to attack";
-                return null;
-            }
-
-            var candidates = new List<BaseUnitEntity>();
-            if (situation.BestTarget != null && situation.HittableEnemies.Contains(situation.BestTarget)) candidates.Add(situation.BestTarget);
-            foreach (var e in situation.HittableEnemies)
-                if (!candidates.Contains(e)) candidates.Add(e);
-
-            foreach (var enemy in candidates)
-            {
-                if (enemy == null || !enemy.IsConscious || IsAlreadySworn(situation, oath, enemy)) continue;
-                var hit = CombatAPI.GetHitChance(melee, unit, enemy);
-                int avoidance = hit != null ? Math.Max(hit.EstimatedDodgeChance, hit.EstimatedParryChance) : 0;
-                if (avoidance >= ExtraOathMinAvoidance)
-                {
-                    why = $"extra oath: {enemy.CharacterName} dodges/parries {avoidance}% and the oath's attack can't be avoided";
-                    return enemy;
-                }
-                why = $"kill reward already taken this round; {enemy.CharacterName} only dodges/parries {avoidance}%";
-                return null;  // only the enemy she's about to hit is worth an extra oath
-            }
-            why = "kill reward already taken this round; enemies in reach are already sworn";
-            return null;
-        }
-
-        /// <summary>
-        /// The enemy with the least HP that she can reach this turn (ties: best target score). Killing an oath target
-        /// heals her, so the quickest kill comes first; her attacks then focus that enemy (oath target priority in
-        /// the analyzer and the attack planner). The oath stays on the enemy until it dies.
-        /// </summary>
-        private static BaseUnitEntity ChooseOathTarget(Situation situation, AbilityData oath, float oathCost, out string why)
-        {
-            var unit = situation.Unit;
-            float apAfter = situation.CurrentAP - oathCost;
-
             var melee = new List<AbilityData>();
             foreach (var attack in situation.AvailableAttacks)
             {
                 if (attack?.Weapon == null || !attack.IsMelee || AbilityDatabase.IsGapCloser(attack)) continue;
-                if (CombatAPI.GetAbilityAPCost(attack) > apAfter + 0.01f) continue;
+                if (CombatAPI.GetEffectiveAPCost(attack) > apAfterOath + 0.01f) continue;
                 melee.Add(attack);
             }
             if (melee.Count == 0)
@@ -372,36 +323,38 @@ namespace CompanionAI_v3.Planning.Planners
                 return null;
             }
 
+            bool engaged = CombatAPI.IsInThreateningArea(unit);
             float reach = OathReach(situation, out string reachText);
+            string where = engaged ? "hittable from here (engaged)" : $"within {reachText}";
             var role = situation.CharacterSettings?.Role ?? AIRole.Auto;
             var scoreRole = role == AIRole.Auto ? AIRole.DPS : role;
 
             BaseUnitEntity best = null;
+            string killWith = null;
             float bestHP = float.MaxValue, bestScore = float.MinValue;
+            int inReach = 0;
             foreach (var enemy in situation.Enemies)
             {
                 if (enemy == null || !enemy.IsConscious || enemy.LifeState.IsDead) continue;
                 if (CombatAPI.IsTargetImmuneToDamage(enemy, unit)) continue;
                 if (IsAlreadySworn(situation, oath, enemy)) continue;
-                if (CombatAPI.GetDistanceInTiles(unit, enemy) > reach) continue;
+                if (engaged ? !situation.HittableEnemies.Contains(enemy) : CombatAPI.GetDistanceInTiles(unit, enemy) > reach) continue;
+                inReach++;
 
                 float hp = CombatAPI.GetActualHP(enemy);
                 if (hp > bestHP + 0.01f) continue;
+                AbilityData killer = null;
+                foreach (var attack in melee)
+                    if (CombatAPI.EstimateDamage(attack, enemy) >= hp) { killer = attack; break; }
+                if (killer == null) continue;
+
                 float score = TargetScorer.ScoreEnemy(enemy, situation, scoreRole);
-                if (hp < bestHP - 0.01f || score > bestScore) { bestHP = hp; bestScore = score; best = enemy; }
-            }
-            if (best == null)
-            {
-                why = $"no enemy within {reachText}";
-                return null;
+                if (hp < bestHP - 0.01f || score > bestScore) { bestHP = hp; bestScore = score; best = enemy; killWith = killer.Name; }
             }
 
-            // The oath's attack can't be dodged or parried, so the estimate is a fair guess at a hit.
-            string killWith = null;
-            foreach (var attack in melee)
-                if (CombatAPI.EstimateDamage(attack, best) >= bestHP) { killWith = attack.Name; break; }
-            why = $"{best.CharacterName} has the least HP in reach ({bestHP:F0})" +
-                (killWith != null ? $", {killWith} can kill it this turn" : ", the oath stays until it dies") + $" ({reachText})";
+            why = best != null
+                ? $"{best.CharacterName} has the least HP ({bestHP:F0}) of the enemies {killWith} should kill, {where}"
+                : inReach == 0 ? $"no enemy {where}" : $"{inReach} enemies {where}, none her next attack should kill";
             return best;
         }
 

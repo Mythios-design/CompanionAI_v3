@@ -78,6 +78,22 @@ namespace CompanionAI_v3.Planning.Planners
 
                 // ★ v3.6.14: bonus usage면 0 AP로 처리
                 float cost = CombatAPI.GetEffectiveAPCost(attack);
+                // The best attack is too expensive: try the next best ones that fit the AP left
+                // (Brutal Strike at 2 AP must not hide Strike at 1 AP)
+                if (cost > remainingAP)
+                {
+                    var tried = excludeAbilityGuids != null ? new HashSet<string>(excludeAbilityGuids) : new HashSet<string>();
+                    for (int retry = 0; retry < 6 && attack != null && cost > remainingAP; retry++)
+                    {
+                        string guid = attack.Blueprint?.AssetGuid?.ToString();
+                        if (string.IsNullOrEmpty(guid) || !tried.Add(guid)) break;
+                        if (Main.IsDebugEnabled) Log.Planning.Debug($"[{roleName}] PlanAttack: {attack.Name} too expensive ({cost:F1} > {remainingAP:F1} AP), trying a cheaper attack");
+                        var cheaper = SelectBestAttack(situation, target, tried, context);
+                        if (cheaper == null) break;
+                        attack = cheaper;
+                        cost = CombatAPI.GetEffectiveAPCost(attack);
+                    }
+                }
                 if (cost > remainingAP)
                 {
                     apInsufficientCount++;
