@@ -549,6 +549,7 @@ namespace CompanionAI_v3.Planning.Plans
                 var switchActions = PlanWeaponSetRotationAttack(situation, ref ctx.RemainingAP);
                 if (switchActions.Count > 0)
                 {
+                    DropPlannedReload(ctx.Actions, ref ctx.RemainingAP);
                     ctx.Actions.AddRange(switchActions);
                     Log.Planning.Info($"[{ctx.RoleName}] Phase 1.55: Switch-First — switching weapon for better effectiveness");
                     return CreatePlanWithSnapshot(ctx.Actions, TurnPriority.DirectAttack,

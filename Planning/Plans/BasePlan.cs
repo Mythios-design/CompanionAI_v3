@@ -125,10 +125,20 @@ namespace CompanionAI_v3.Planning.Plans
             => HealPlanner.FindWoundedAlly(situation, threshold);
 
         /// <summary>
-        /// ★ v3.42.0: 여유 AP/MP 아군 치유 (이동 포함) — 전 역할 공용
+        /// 여유 AP/MP 아군 치유 (이동 포함) — 전 역할 공용.
+        /// Heal range and the walk to the ally are measured from where the unit stands now, so a plan that already
+        /// moves it elsewhere skips this; the replan after the move looks again from the new tile.
         /// </summary>
-        protected List<PlannedAction> PlanOpportunisticAllyHeal(Situation situation, ref float remainingAP, float remainingMP)
-            => HealPlanner.PlanOpportunisticAllyHeal(situation, ref remainingAP, remainingMP, RoleName);
+        protected List<PlannedAction> PlanOpportunisticAllyHeal(Situation situation, ref float remainingAP, float remainingMP,
+            List<PlannedAction> plannedActions)
+        {
+            if (plannedActions != null && plannedActions.Exists(a => a.Type == ActionType.Move))
+            {
+                if (Main.IsDebugEnabled) Log.Planning.Debug($"[{RoleName}] Opportunistic ally heal skipped: plan already moves (checked again after the move)");
+                return null;
+            }
+            return HealPlanner.PlanOpportunisticAllyHeal(situation, ref remainingAP, remainingMP, RoleName);
+        }
 
         #endregion
     }

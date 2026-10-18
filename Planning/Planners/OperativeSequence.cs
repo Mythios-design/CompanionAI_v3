@@ -1,8 +1,10 @@
 using System;
 using System.Collections.Generic;
 using Kingmaker.EntitySystem.Entities;
+using Kingmaker.Pathfinding;
 using Kingmaker.UnitLogic.Abilities;
 using Kingmaker.Utility;
+using Kingmaker.View.Covers;
 using UnityEngine;
 using CompanionAI_v3.Analysis;
 using CompanionAI_v3.Core;
@@ -111,6 +113,8 @@ namespace CompanionAI_v3.Planning.Planners
             {
                 if (actions[i].Type == ActionType.Move && actions[i].MoveDestination.HasValue) { shootFrom = actions[i].MoveDestination.Value; break; }
             }
+            if (MoveIntoSentenceRange(actions, situation, sentence, expose, analyse, target, shot, remainingAP, ref shotIndex, ref shootFrom))
+                Log.Planning.Info($"[{roleName}] Operative turn: shooting from ({shootFrom.x:F1}, {shootFrom.z:F1}) instead, within Death Sentence range of {target.CharacterName}");
 
             float budget = remainingAP;
             var skipped = new List<string>();
@@ -150,6 +154,68 @@ namespace CompanionAI_v3.Planning.Planners
                     (names.Count > 0 ? string.Join(" -> ", names) + " -> " : "") + $"{shot.Ability.Name}{extra} (AP left {remainingAP:F1})" +
                     (skipped.Count > 0 ? $"; skipped: {string.Join(", ", skipped)}" : ""));
             }
+        }
+
+        /// <summary>
+        /// When Death Sentence is the one step out of range from the shooting tile and the AP covers the whole setup,
+        /// moves the shot to the reachable tile nearest the planned one that is within Death Sentence range, can still
+        /// shoot the target, provokes no attacks and isn't next to an enemy. Rewrites the planned move, or adds one.
+        /// </summary>
+        private static bool MoveIntoSentenceRange(List<PlannedAction> actions, Situation situation, AbilityData sentence,
+            AbilityData expose, AbilityData analyse, BaseUnitEntity target, PlannedAction shot, float remainingAP,
+            ref int shotIndex, ref Vector3 shootFrom)
+        {
+            var unit = situation.Unit;
+            if (sentence == null || situation.CurrentMP < 1f || AllyStateCache.HasBuff(target, sentence)) return false;
+            float sentenceRange = CombatAPI.GetAbilityRangeInTiles(sentence);
+            if (sentenceRange <= 0 || sentenceRange >= 1000 || CombatAPI.GetDistanceInTiles(shootFrom, target) <= sentenceRange) return false;
+
+            float needed = CombatAPI.GetAbilityAPCost(sentence);
+            if (expose != null && !AllyStateCache.HasBuff(target, expose)) needed += CombatAPI.GetAbilityAPCost(expose);
+            if (analyse != null && expose != null && !AllyStateCache.HasBuff(target, analyse)) needed += CombatAPI.GetAbilityAPCost(analyse);
+            if (needed > remainingAP + 0.01f) return false;
+
+            float shotRange = CombatAPI.GetAbilityRangeInTiles(shot.Ability);
+            var targetNode = target.CurrentUnwalkableNode;
+            var tiles = MovementAPI.FindAllReachableTilesWithThreatsSync(unit, situation.CurrentMP);
+            if (targetNode == null || tiles == null) return false;
+
+            Vector3? best = null;
+            float bestShift = float.MaxValue;
+            foreach (var cell in tiles.Values)
+            {
+                if (!cell.IsCanStand || cell.ProvokedAttacks > 0 || cell.EnteredAoE > 0 || !(cell.Node is CustomGridNodeBase node)) continue;
+                var pos = node.Vector3Position;
+                float dist = CombatAPI.GetDistanceInTiles(pos, target);
+                if (dist > sentenceRange || (shotRange > 0 && dist > shotRange)) continue;
+                if (NextToEnemy(pos, situation)) continue;
+                var los = LosCalculations.GetWarhammerLos(node, unit.SizeRect, targetNode, target.SizeRect);
+                if (los.CoverType == LosCalculations.CoverType.Invisible) continue;
+                float shift = Vector3.Distance(pos, shootFrom);
+                if (shift < bestShift) { bestShift = shift; best = pos; }
+            }
+            if (!best.HasValue) return false;
+
+            int moveIndex = -1;
+            for (int i = shotIndex - 1; i >= 0; i--)
+                if (actions[i].Type == ActionType.Move) { moveIndex = i; break; }
+            if (moveIndex >= 0)
+                actions[moveIndex].MoveDestination = best.Value;
+            else
+            {
+                actions.Insert(shotIndex, PlannedAction.Move(best.Value, $"Into Death Sentence range of {target.CharacterName}"));
+                shotIndex++;
+            }
+            shootFrom = best.Value;
+            return true;
+        }
+
+        private static bool NextToEnemy(Vector3 pos, Situation situation)
+        {
+            if (situation.Enemies == null) return false;
+            foreach (var e in situation.Enemies)
+                if (e != null && e.IsConscious && CombatAPI.GetDistanceInTiles(pos, e) < 2f) return true;
+            return false;
         }
 
         /// <summary>Affordable, not already on the target, and castable on it (Death Sentence within range of the shooting tile).</summary>

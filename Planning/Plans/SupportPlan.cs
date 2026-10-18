@@ -60,6 +60,7 @@ namespace CompanionAI_v3.Planning.Plans
                 var switchActions = PlanWeaponSetRotationAttack(situation, ref remainingAP);
                 if (switchActions.Count > 0)
                 {
+                    DropPlannedReload(actions, ref remainingAP);
                     actions.AddRange(switchActions);
                     Log.Planning.Info($"[Support] Phase 1.55: Switch-First — switching weapon for better effectiveness");
                     return CreatePlanWithSnapshot(actions, TurnPriority.DirectAttack, "Support weapon switch-first", situation);
@@ -467,7 +468,7 @@ namespace CompanionAI_v3.Planning.Plans
                 tryAllyBuffFirst: false, includeFallbackDebuff: false);
 
             // ★ v3.42.0: Phase 7.6 — 추가 아군 치유 기회 (Phase 2에서 치유하지 못한 대상)
-            var oppHealActions = PlanOpportunisticAllyHeal(situation, ref remainingAP, remainingMP);
+            var oppHealActions = PlanOpportunisticAllyHeal(situation, ref remainingAP, remainingMP, actions);
             if (oppHealActions != null)
             {
                 actions.AddRange(oppHealActions);

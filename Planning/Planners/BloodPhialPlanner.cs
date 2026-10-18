@@ -33,11 +33,44 @@ namespace CompanionAI_v3.Planning.Planners
         public static bool IsBloodPhial(AbilityData ability)
             => ability?.Blueprint?.AssetGuid?.ToString() == BLOOD_PHIAL;
 
+        /// <summary>
+        /// The unit has a Blood Phial but it wasn't among this turn's abilities (so the planner never got it): says why,
+        /// from the game's own reasons. Silent for units without one and when no AP is left anyway.
+        /// </summary>
+        private static void LogNotHeld(Situation situation, float remainingAP, string roleName)
+        {
+            var raw = situation?.Unit?.Abilities?.RawFacts;
+            if (raw == null || remainingAP < 1f) return;
+            try
+            {
+                foreach (var fact in raw)
+                {
+                    var ability = fact?.Data;
+                    if (!IsBloodPhial(ability)) continue;
+                    var reasons = new List<string>();
+                    foreach (var r in ability.GetUnavailabilityReasons()) reasons.Add(r.ToString());
+                    if (ability.IsRestricted) reasons.Add("restricted");
+                    Log.Planning.Info($"[{roleName}] Blood Phial not usable this turn ({remainingAP:F0} AP left): " +
+                        (reasons.Count > 0 ? string.Join(", ", reasons) : $"no reason from the game, {ability.GetAvailableForCastCount()} charges"));
+                    return;
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Planning.Error(ex, $"[BloodPhial] reading why it isn't usable failed for {situation.Unit.CharacterName}");
+            }
+        }
+
         /// <summary>Adds Blood Phial with the AP left, before any turn-ending ability already in the plan.</summary>
         public static void Append(List<PlannedAction> actions, Situation situation, ref float remainingAP, string roleName)
         {
             var phial = situation?.HeldBloodPhial;
-            if (phial == null || actions == null) return;
+            if (actions == null) return;
+            if (phial == null)
+            {
+                LogNotHeld(situation, remainingAP, roleName);
+                return;
+            }
             try
             {
                 float cost = CombatAPI.GetAbilityAPCost(phial);

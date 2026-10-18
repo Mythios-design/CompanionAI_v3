@@ -28,7 +28,7 @@ namespace CompanionAI_v3.Planning.Planners
             public string SetName;
             /// <summary>Enemies the set can hit from the current tile.</summary>
             public int HittableHere;
-            /// <summary>Enemies within range after spending the remaining MP (no line-of-sight check).</summary>
+            /// <summary>Enemies attackable after spending the remaining MP: melee in reach, ranged in range with line of sight from a reachable tile.</summary>
             public int ReachableAfterMove;
             /// <summary>Why the set can't attack at all, or null.</summary>
             public string Unusable;
@@ -111,6 +111,7 @@ namespace CompanionAI_v3.Planning.Planners
             bool arcInsulated = CombatAPI.HasArcInsulationBuff(unit);
             int maxAlliesHit = AIConfig.GetAoEConfig()?.MaxPlayerAlliesHit ?? 1;
             float mp = situation.CurrentMP;
+            List<CustomGridNodeBase> moveTiles = null;  // tiles reachable this turn, built on first ranged check
 
             foreach (var enemy in situation.Enemies)
             {
@@ -119,6 +120,7 @@ namespace CompanionAI_v3.Planning.Planners
 
                 float dist = CombatAPI.GetDistanceInTiles(unit, enemy);
                 bool hereInRange = false, reachable = false, hereHit = false, allyBlocked = false;
+                float rangedReach = 0f;  // longest ranged attack that could reach this enemy after moving
 
                 foreach (var (weapon, attack) in usable)
                 {
@@ -126,7 +128,11 @@ namespace CompanionAI_v3.Planning.Planners
                     // A chain onto allies depends only on where the target stands, so moving doesn't help:
                     // that enemy is neither hittable here nor reachable after moving with this attack
                     bool chainBlocked = avoidFriendlyFire && ChainHitsAllies(attack, unit, enemy, arcInsulated, maxAlliesHit);
-                    if (!chainBlocked && dist <= range + mp) reachable = true;
+                    if (!chainBlocked && dist <= range + mp)
+                    {
+                        if (weapon.IsMelee) reachable = true;
+                        else rangedReach = Math.Max(rangedReach, range);
+                    }
                     if (dist > range) continue;
                     hereInRange = true;
                     if (chainBlocked) { allyBlocked = true; continue; }
@@ -141,10 +147,37 @@ namespace CompanionAI_v3.Planning.Planners
                     break;
                 }
 
-                if (hereHit) result.HittableHere++;
+                if (hereHit) { result.HittableHere++; reachable = true; }
                 else if (hereInRange && allyBlocked) result.AllyBlocked.Add(enemy.CharacterName);
+                if (!reachable && rangedReach > 0f)
+                {
+                    if (moveTiles == null) moveTiles = ReachableTiles(unit, mp);
+                    reachable = CanSeeFromAnyTile(moveTiles, unit, enemy, rangedReach);
+                }
                 if (reachable) result.ReachableAfterMove++;
             }
+        }
+
+        private static List<CustomGridNodeBase> ReachableTiles(BaseUnitEntity unit, float mp)
+        {
+            var list = new List<CustomGridNodeBase>();
+            if (mp <= 0f) return list;
+            var tiles = MovementAPI.FindAllReachableTilesWithThreatsSync(unit, mp);
+            if (tiles == null) return list;
+            foreach (var cell in tiles.Values)
+                if (cell.IsCanStand && cell.Node is CustomGridNodeBase node) list.Add(node);
+            return list;
+        }
+
+        /// <summary>A tile reachable this turn that is within range of the enemy and can see it.</summary>
+        private static bool CanSeeFromAnyTile(List<CustomGridNodeBase> tiles, BaseUnitEntity unit, BaseUnitEntity enemy, float range)
+        {
+            foreach (var node in tiles)
+            {
+                if (CombatAPI.GetDistanceInTiles(node.Vector3Position, enemy) > range) continue;
+                if (HasLineOfSight(node, unit, enemy)) return true;
+            }
+            return false;
         }
 
         private static bool HasLineOfSight(CustomGridNodeBase fromNode, BaseUnitEntity unit, BaseUnitEntity enemy)

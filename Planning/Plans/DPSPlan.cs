@@ -71,6 +71,7 @@ namespace CompanionAI_v3.Planning.Plans
                     var switchActions = PlanWeaponSetRotationAttack(situation, ref remainingAP);
                     if (switchActions.Count > 0)
                     {
+                        DropPlannedReload(actions, ref remainingAP);
                         actions.AddRange(switchActions);
                         Log.Planning.Info($"[DPS] Phase 1.55: Switch-First — current weapon ineffective, switching before attacks");
                         return CreatePlanWithSnapshot(actions, TurnPriority.DirectAttack, "DPS weapon switch-first", situation);
@@ -1053,7 +1054,7 @@ namespace CompanionAI_v3.Planning.Plans
 
             // ★ v3.42.0: Phase 7.0 — 여유 아군 치유 (메디킷 등)
             // 공격+PostAction 이후, 남은 AP/MP로 부상 아군 치유
-            var oppHealActions = PlanOpportunisticAllyHeal(situation, ref remainingAP, remainingMP);
+            var oppHealActions = PlanOpportunisticAllyHeal(situation, ref remainingAP, remainingMP, actions);
             if (oppHealActions != null)
             {
                 actions.AddRange(oppHealActions);

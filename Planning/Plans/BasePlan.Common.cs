@@ -78,6 +78,22 @@ namespace CompanionAI_v3.Planning.Plans
         }
 
         /// <summary>
+        /// A switch-first plan puts the weapon in hand away, so a Reload planned earlier in the turn (Phase 1.5) would
+        /// spend AP on the wrong weapon. Takes it out and gives the AP back.
+        /// </summary>
+        protected void DropPlannedReload(List<PlannedAction> actions, ref float remainingAP)
+        {
+            if (actions == null) return;
+            for (int i = actions.Count - 1; i >= 0; i--)
+            {
+                if (actions[i].Type != ActionType.Reload) continue;
+                remainingAP += actions[i].APCost;
+                Log.Planning.Info($"[{RoleName}] Reload dropped ({actions[i].APCost:F0} AP back): switching weapons instead");
+                actions.RemoveAt(i);
+            }
+        }
+
+        /// <summary>
         /// A Heroic Act, or an ability seen going on cooldown after one cast (OncePerTurnAbilities), is left out of
         /// later picks once planned. Without this a 0 AP ultimate on the last enemy gets re-picked by the
         /// "attack the only target again" rule until the loop runs out.
