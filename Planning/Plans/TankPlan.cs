@@ -780,9 +780,16 @@ namespace CompanionAI_v3.Planning.Plans
 
             // ★ v3.8.86: Phase 8.9 - 이동 완료 후 ClearMP 방어 자세
             // Phase 2에서 ClearMPAfterUse로 연기된 방어 능력을 이동 완료 후 사용
-            if (tankNeedsMovement && !situation.HasPerformedFirstAction && remainingAP >= 1f)
+            // Same "is defence needed" check as Phase 2: the stance was only deferred if Phase 2 wanted it
+            if (tankNeedsMovement && needDefense && !situation.HasPerformedFirstAction && remainingAP >= 1f)
             {
                 var deferredDefense = PlanDefensiveStanceWithReservation(situation, ref remainingAP, budget.EffectiveReserved, movementStillNeeded: false);
+                if (deferredDefense != null && StanceBlocksChargeAttack(situation, actions, remainingAP, out string chargeWhy))
+                {
+                    remainingAP += deferredDefense.APCost;
+                    Log.Planning.Info($"[Tank] Phase 8.9: {deferredDefense.Ability?.Name} held - {chargeWhy}");
+                    deferredDefense = null;
+                }
                 if (deferredDefense != null)
                 {
                     actions.Add(deferredDefense);
@@ -925,6 +932,39 @@ namespace CompanionAI_v3.Planning.Plans
         }
 
         // ★ v3.5.10: PlanTaunt() 삭제 - SmartTaunt 시스템(Phase 4)으로 완전 대체됨
+
+        /// <summary>
+        /// The plan walks toward an enemy but stops out of melee with no attack planned, and a gap closer (Charge) is
+        /// available: the replan after the walk can Charge and attack, unless a stance cast now leaves less AP than
+        /// the gap closer plus the cheapest melee attack.
+        /// </summary>
+        private static bool StanceBlocksChargeAttack(Situation situation, List<PlannedAction> actions, float apAfterStance, out string why)
+        {
+            why = null;
+            UnityEngine.Vector3? dest = null;
+            foreach (var a in actions)
+            {
+                if (a.Type == ActionType.Attack) return false;
+                if (a.Type == ActionType.Move && a.MoveDestination.HasValue) dest = a.MoveDestination;
+            }
+            if (!dest.HasValue || situation.Enemies == null) return false;
+            foreach (var e in situation.Enemies)
+                if (e != null && e.IsConscious && CombatAPI.GetDistanceInTiles(dest.Value, e) < 1.5f) return false;
+
+            float gapCloser = float.MaxValue, melee = float.MaxValue;
+            string gapCloserName = null;
+            foreach (var a in situation.AvailableAttacks)
+            {
+                if (a == null) continue;
+                float cost = CombatAPI.GetAbilityAPCost(a);
+                if (AbilityDatabase.IsGapCloser(a)) { if (cost < gapCloser) { gapCloser = cost; gapCloserName = a.Name; } }
+                else if (a.Weapon != null && a.IsMelee && cost < melee) melee = cost;
+            }
+            if (gapCloserName == null || melee == float.MaxValue) return false;
+            if (apAfterStance + 0.01f >= gapCloser + melee) return false;
+            why = $"walk ends out of melee; keeping {gapCloser + melee:F0} AP for {gapCloserName} and an attack";
+            return true;
+        }
 
         #endregion
     }

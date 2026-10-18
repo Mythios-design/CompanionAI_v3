@@ -36,6 +36,8 @@ namespace CompanionAI_v3.Planning.Planners
             public int Enemies;
             public int Allies;
             public string Who;
+            /// <summary>Melee enemies that can reach the stand tile next turn, outside and inside the cone.</summary>
+            public int MeleeReachOutside, MeleeReachInside;
         }
 
         public static bool IsConeAbility(AbilityData ability)
@@ -98,7 +100,8 @@ namespace CompanionAI_v3.Planning.Planners
             remainingAP -= cost;
             actions.Add(PlannedAction.Attack(cone, shot.AimAt, $"{cone.Name}: {shot.Enemies} enemies ({shot.Who})", cost));
             Log.Planning.Info($"[{roleName}] {cone.Name}: {shot.Enemies} enemies, {shot.Allies} allies in cone, aim at {shot.AimAt.CharacterName}" +
-                (shot.RequiresMove ? $", moving to ({shot.Stand.Vector3Position.x:F1},{shot.Stand.Vector3Position.z:F1}) first" : " from here"));
+                (shot.RequiresMove ? $", moving to ({shot.Stand.Vector3Position.x:F1},{shot.Stand.Vector3Position.z:F1}) first" +
+                    $" (melee reach there: {shot.MeleeReachOutside} outside the cone, {shot.MeleeReachInside} inside)" : " from here"));
             return actions;
         }
 
@@ -150,7 +153,8 @@ namespace CompanionAI_v3.Planning.Planners
             foreach (var (stand, moveTiles) in stands)
             {
                 var standPos = stand.Vector3Position;
-                int meleeReach = moveTiles > 0f && !durable ? CombatAPI.CountMeleeEnemiesThatCanReach(unit, standPos, enemies) : 0;
+                // Melee enemies that can reach the stand tile next turn (only when moving there; standing still costs nothing new)
+                List<BaseUnitEntity> reachers = moveTiles > 0f && !durable ? MeleeReachers(unit, standPos, enemies) : null;
                 foreach (var aim in enemies)
                 {
                     if (CombatAPI.MetersToTiles(Vector3.Distance(standPos, aim.Position)) > range) continue;
@@ -167,19 +171,38 @@ namespace CompanionAI_v3.Planning.Planners
                     if (allyCount > maxAllies) continue;
 
                     // Enemies first; then prefer not moving, not hitting allies, not standing where melee can reach.
-                    float score = enemyCount * 100f - allyCount * 60f - moveTiles * 2f - meleeReach * 30f;
+                    // A melee enemy outside the cone (not stunned) outweighs one more enemy in it; one inside may still
+                    // shake off the stun, so it counts a little.
+                    int reachOutside = 0, reachInside = 0;
+                    if (reachers != null)
+                        foreach (var r in reachers) { if (Covers(pattern, r)) reachInside++; else reachOutside++; }
+                    float score = enemyCount * 100f - allyCount * 60f - moveTiles * 2f - reachOutside * 120f - reachInside * 30f;
                     if (score > bestScore)
                     {
                         bestScore = score;
                         best = new ConeShot
                         {
                             Stand = stand, RequiresMove = stand != currentNode, AimAt = aim,
-                            Enemies = enemyCount, Allies = allyCount, Who = string.Join(", ", names.Take(5))
+                            Enemies = enemyCount, Allies = allyCount, Who = string.Join(", ", names.Take(5)),
+                            MeleeReachOutside = reachOutside, MeleeReachInside = reachInside
                         };
                     }
                 }
             }
             return best;
+        }
+
+        /// <summary>Living melee enemies that can reach the tile next turn (CombatAPI.CountMeleeEnemiesThatCanReach, one by one).</summary>
+        private static List<BaseUnitEntity> MeleeReachers(BaseUnitEntity unit, Vector3 pos, List<BaseUnitEntity> enemies)
+        {
+            var list = new List<BaseUnitEntity>();
+            var single = new List<BaseUnitEntity>(1) { null };
+            foreach (var e in enemies)
+            {
+                single[0] = e;
+                if (CombatAPI.CountMeleeEnemiesThatCanReach(unit, pos, single) > 0) list.Add(e);
+            }
+            return list;
         }
 
         private static bool Covers(Kingmaker.UnitLogic.Abilities.Components.Patterns.OrientedPatternData pattern, BaseUnitEntity unit)

@@ -189,6 +189,22 @@ namespace CompanionAI_v3.Planning
                 }
             }
 
+            // Ranged: don't walk closer to the enemy just to shoot the same targets as from here
+            if (bestIdx == 1 && result.AllOptions[0].IsViable
+                && situation.EffectiveRangePreference != Settings.RangePreference.PreferMelee
+                && result.AllOptions[1].DestinationNode != null
+                && result.AllOptions[1].HittableEnemyCount <= currentHittable)
+            {
+                float here = NearestEnemyTiles(situation, situation.Unit.Position);
+                float there = NearestEnemyTiles(situation, result.AllOptions[1].DestinationPosition);
+                if (there < here - 1f)
+                {
+                    bestIdx = 0;
+                    Log.Planning.Info($"[{roleName}] TacticalEval: attacking from here - the move hits {result.AllOptions[1].HittableEnemyCount} " +
+                        $"(same as here) but ends closer to the enemy ({there:F1} vs {here:F1} tiles)");
+                }
+            }
+
             result.BestOption = result.AllOptions[bestIdx];
             result.ChosenStrategy = result.BestOption.Strategy;
 
@@ -200,6 +216,19 @@ namespace CompanionAI_v3.Planning
             }
 
             return result;
+        }
+
+        private static float NearestEnemyTiles(Situation situation, Vector3 pos)
+        {
+            float best = float.MaxValue;
+            if (situation.Enemies == null) return best;
+            foreach (var e in situation.Enemies)
+            {
+                if (e == null || !e.IsConscious || e.LifeState.IsDead) continue;
+                float d = CombatAPI.GetDistanceInTiles(pos, e);
+                if (d < best) best = d;
+            }
+            return best;
         }
 
         #region Option A: AttackFromCurrent
