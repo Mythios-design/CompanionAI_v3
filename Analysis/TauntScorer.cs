@@ -460,6 +460,12 @@ namespace CompanionAI_v3.Analysis
                 }
             }
 
+            // A point taunt needs line of sight from the casting tile to its aim point, or the cast is refused
+            // (HasNoLosToTarget). Fall back to an affected enemy's tile as the aim point, else drop the option.
+            if (!isSelfTarget && CombatAPI.IsPointTargetAbility(taunt)
+                && !TryFindVisibleTauntPoint(taunt, position, affectedEnemies, ref targetPoint))
+                return null;
+
             return new TauntOption
             {
                 Ability = taunt,
@@ -472,6 +478,42 @@ namespace CompanionAI_v3.Analysis
                 Score = score,
                 AffectedEnemies = affectedEnemies
             };
+        }
+
+        /// <summary>
+        /// Game targeting check for a point taunt cast from <paramref name="casterPos"/>: keeps the planned aim
+        /// point if the game would accept it, else tries each affected enemy's tile. False when none works.
+        /// </summary>
+        private static bool TryFindVisibleTauntPoint(AbilityData taunt, Vector3 casterPos, List<BaseUnitEntity> affectedEnemies, ref Vector3 targetPoint)
+        {
+            var casterNode = casterPos.GetNearestNodeXZ() as CustomGridNodeBase;
+            if (casterNode == null) return true;  // can't check here; the cast-time check still applies
+
+            string firstReason = null;
+            if (CanTargetPointFrom(taunt, casterNode, targetPoint, out firstReason)) return true;
+            foreach (var enemy in affectedEnemies)
+            {
+                if (enemy == null) continue;
+                if (CanTargetPointFrom(taunt, casterNode, enemy.Position, out _))
+                {
+                    Log.Analysis.Debug($"[TauntScorer] {taunt.Name}: aim point refused ({firstReason}), aiming at {enemy.CharacterName}'s tile instead");
+                    targetPoint = enemy.Position;
+                    return true;
+                }
+            }
+            Log.Analysis.Debug($"[TauntScorer] {taunt.Name} from ({casterPos.x:F1}, {casterPos.z:F1}): no aim point the game accepts ({firstReason}) - option dropped");
+            return false;
+        }
+
+        private static bool CanTargetPointFrom(AbilityData taunt, CustomGridNodeBase casterNode, Vector3 point, out string reason)
+        {
+            reason = null;
+            var pointNode = point.GetNearestNodeXZ() as CustomGridNodeBase;
+            if (pointNode == null) { reason = "no node at point"; return false; }
+            bool ok = taunt.CanTargetFromNode(casterNode, pointNode, new TargetWrapper(point),
+                out int _, out LosCalculations.CoverType _, out AbilityData.UnavailabilityReasonType? why);
+            if (!ok) reason = why?.ToString() ?? "refused";
+            return ok;
         }
 
         /// <summary>

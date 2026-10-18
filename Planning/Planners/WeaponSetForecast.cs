@@ -123,9 +123,13 @@ namespace CompanionAI_v3.Planning.Planners
                 foreach (var (weapon, attack) in usable)
                 {
                     float range = weapon.IsMelee ? Math.Max(attack.RangeTiles, 1) + 0.5f : attack.RangeTiles;
-                    if (dist <= range + mp) reachable = true;
+                    // A chain onto allies depends only on where the target stands, so moving doesn't help:
+                    // that enemy is neither hittable here nor reachable after moving with this attack
+                    bool chainBlocked = avoidFriendlyFire && ChainHitsAllies(attack, unit, enemy, arcInsulated, maxAlliesHit);
+                    if (!chainBlocked && dist <= range + mp) reachable = true;
                     if (dist > range) continue;
                     hereInRange = true;
+                    if (chainBlocked) { allyBlocked = true; continue; }
 
                     if (!weapon.IsMelee && !HasLineOfSight(fromNode, unit, enemy)) continue;
                     if (avoidFriendlyFire && !IsAllySafe(attack, unit, enemy, situation.Allies, arcInsulated, maxAlliesHit))
@@ -151,11 +155,15 @@ namespace CompanionAI_v3.Planning.Planners
             return los.CoverType != LosCalculations.CoverType.Invisible;
         }
 
+        private static bool ChainHitsAllies(WeaponAttackProfile attack, BaseUnitEntity unit, BaseUnitEntity enemy,
+            bool arcInsulated, int maxAlliesHit)
+            => attack.ChainsToAllies && !arcInsulated
+               && AoESafetyChecker.SimulateWeaponChainAllyHits(enemy, unit, attack.ChainRadius, attack.ChainMax) > maxAlliesHit;
+
         private static bool IsAllySafe(WeaponAttackProfile attack, BaseUnitEntity unit, BaseUnitEntity enemy,
             List<BaseUnitEntity> allies, bool arcInsulated, int maxAlliesHit)
         {
-            if (attack.ChainsToAllies && !arcInsulated
-                && AoESafetyChecker.SimulateWeaponChainAllyHits(enemy, unit, attack.ChainRadius, attack.ChainMax) > maxAlliesHit)
+            if (ChainHitsAllies(attack, unit, enemy, arcInsulated, maxAlliesHit))
                 return false;
 
             if (attack.Spreads && allies != null)
