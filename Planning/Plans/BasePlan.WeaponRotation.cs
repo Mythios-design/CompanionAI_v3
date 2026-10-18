@@ -76,6 +76,22 @@ namespace CompanionAI_v3.Planning.Plans
                 return false;
             }
 
+            // Engaged-only backup set (e.g. Argenta's Blast Wave): used only while an enemy is adjacent, and left
+            // for the main set as soon as none is, whatever either set could hit
+            if (!IsEngaged(situation))
+            {
+                if (IsEngagedOnlyBackup(unit, targetSet))
+                {
+                    Log.Planning.Info($"[{RoleName}] Weapon choice: set {targetSet} is {unit.CharacterName}'s backup set, only used when engaged -> stay");
+                    return false;
+                }
+                if (IsEngagedOnlyBackup(unit, situation.CurrentWeaponSetIndex))
+                {
+                    Log.Planning.Info($"[{RoleName}] Weapon choice: no enemy adjacent -> back from the backup set to the main set");
+                    return true;
+                }
+            }
+
             var forecast = WeaponSetForecast.Evaluate(situation, targetSet);
             int inHand = situation.HittableEnemies?.Count ?? 0;
 
@@ -271,6 +287,31 @@ namespace CompanionAI_v3.Planning.Plans
             return false;
         }
 
+        /// <summary>
+        /// The set is an engaged-only backup: the unit's main set (the one it started the combat with) is a ranged
+        /// weapon whose attacks can't fire next to enemies, and this other set has an attack that can. Such a set
+        /// is only for when the unit is engaged.
+        /// </summary>
+        protected static bool IsEngagedOnlyBackup(Kingmaker.EntitySystem.Entities.BaseUnitEntity unit, int setIndex)
+        {
+            var sets = Data.LoadoutProfiles.Get(unit);
+            if (sets == null || setIndex < 0 || setIndex >= sets.Length) return false;
+            int home = Data.WeaponSetAnalyzer.GetHomeSet(unit);
+            if (home == setIndex || home < 0 || home >= sets.Length) return false;
+
+            var main = sets[home]?.Primary;
+            if (main == null || main.IsMelee || main.Attacks.Count == 0) return false;
+            foreach (var a in main.Attacks)
+                if (a.UsableWhenEngaged) return false;
+
+            var backup = sets[setIndex];
+            if (backup == null) return false;
+            foreach (var w in backup.Weapons)
+                foreach (var a in w.Attacks)
+                    if (a.UsableWhenEngaged) return true;
+            return false;
+        }
+
         /// <summary>True when a conscious enemy is adjacent (within melee threat range).</summary>
         protected static bool IsEngaged(Situation situation)
         {
@@ -314,6 +355,11 @@ namespace CompanionAI_v3.Planning.Plans
             }
 
             int home = Data.WeaponSetAnalyzer.GetHomeSet(situation.Unit);
+            if (cur != home && alt == home && IsEngagedOnlyBackup(situation.Unit, cur))
+            {
+                Log.Planning.Info($"[{RoleName}] Weapon switch: no enemy adjacent — back from backup {curSet.PrimaryWeaponName} to main weapon {altSet.PrimaryWeaponName}");
+                return true;
+            }
             if (cur != home && alt == home)
             {
                 float nearest = situation.NearestEnemyDistanceTiles;
