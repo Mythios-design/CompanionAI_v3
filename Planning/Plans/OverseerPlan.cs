@@ -37,6 +37,8 @@ namespace CompanionAI_v3.Planning.Plans
 
             var actions = new List<PlannedAction>();
             float remainingAP = situation.CurrentAP;
+            // Raining Blood refills an empty Blood Phial: its AP is set aside before anything else can take it
+            float rainingBloodReserve = Planners.RainingBloodPlanner.Reserve(situation, ref remainingAP, RoleName);
             float remainingMP = situation.CurrentMP;
 
             // 사역마가 없으면 DPS 폴백 (하지만 이 Plan이 선택되었다면 사역마가 있어야 함)
@@ -1161,6 +1163,8 @@ namespace CompanionAI_v3.Planning.Plans
             }
 
             // Raining Blood: before a single-target melee attack, with AP left (ahead of Blood Phial)
+
+            remainingAP += rainingBloodReserve;
 
             Planners.RainingBloodPlanner.Arrange(actions, situation, ref remainingAP, RoleName);
 

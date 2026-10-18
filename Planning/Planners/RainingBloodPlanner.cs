@@ -15,9 +15,13 @@ namespace CompanionAI_v3.Planning.Planners
     /// Raining Blood (Death Cult Assassin): the next single-target melee attack splashes blood in a 5-cell cone
     /// behind the target. Allies in it gain bloodblessed (+damage), enemies, the target included, bloodstained
     /// (+damage taken). Each cast also gives a Blood Phial charge back.
-    /// AbilityPolicy holds it out of the normal buff picks (Situation.HeldRainingBlood). This last pass puts it
-    /// right before a planned single-target melee attack, only with AP left for it (the attack is already paid
-    /// for). With several such attacks, the one whose cone scores best goes first: 2 per enemy, 1 per ally.
+    /// It's used as a Blood Phial refill, not a lead-in: AbilityPolicy holds it out of the normal buff picks
+    /// (Situation.HeldRainingBlood), and it's only valid while Blood Phial has no charges left, on a turn with a
+    /// single-target melee attack still to make (so the splash lands).
+    /// Reserve() sets its AP aside at the start of planning when she can afford it plus such an attack, so buffs
+    /// and debuffs can't take it. The plan gives the reserve back before Arrange(), which puts Raining Blood right
+    /// before a planned single-target melee attack; with no such attack the AP stays unspent by it.
+    /// With several such attacks, the one whose cone scores best goes first: 2 per enemy, 1 per ally.
     /// The cone is approximated as up to 5 tiles behind the target, within 45 degrees of the line from the attack
     /// tile through the target. Area attacks, jumps, charges and Heroic Acts don't trigger it, so it's never put
     /// before those.
@@ -33,6 +37,31 @@ namespace CompanionAI_v3.Planning.Planners
         public static bool IsRainingBlood(AbilityData ability)
             => ability?.Blueprint?.AssetGuid?.ToString() == RAINING_BLOOD;
 
+        /// <summary>
+        /// Sets Raining Blood's AP aside when the phial is empty and she can afford it plus a single-target melee
+        /// attack. Returns the AP taken out of remainingAP; the plan adds it back before Arrange().
+        /// </summary>
+        public static float Reserve(Situation situation, ref float remainingAP, string roleName)
+        {
+            var rb = situation?.HeldRainingBlood;
+            if (rb == null) return 0f;
+            try
+            {
+                if (!PhialEmpty(situation.Unit) || AlreadyPrimed(situation.Unit, rb)) return 0f;
+                float cost = CombatAPI.GetAbilityAPCost(rb);
+                float attackCost = CheapestSingleTargetMelee(situation);
+                if (attackCost < 0f || cost + attackCost > remainingAP + 0.01f) return 0f;
+                remainingAP -= cost;
+                Log.Planning.Info($"[{roleName}] Blood Phial empty: {cost:F0} AP reserved for Raining Blood before a single-target attack");
+                return cost;
+            }
+            catch (Exception ex)
+            {
+                Log.Planning.Error(ex, $"[RainingBlood] reserve failed for {situation.Unit?.CharacterName}");
+                return 0f;
+            }
+        }
+
         public static void Arrange(List<PlannedAction> actions, Situation situation, ref float remainingAP, string roleName)
         {
             var rb = situation?.HeldRainingBlood;
@@ -41,7 +70,7 @@ namespace CompanionAI_v3.Planning.Planners
             {
                 float cost = CombatAPI.GetAbilityAPCost(rb);
                 if (cost > remainingAP + 0.01f) return;
-                if (AlreadyPrimed(situation.Unit, rb)) return;
+                if (!PhialEmpty(situation.Unit) || AlreadyPrimed(situation.Unit, rb)) return;
 
                 int bestIndex = -1, bestScore = -1, bestEnemies = 0, bestAllies = 0;
                 Vector3 from = situation.Unit.Position;
@@ -75,14 +104,49 @@ namespace CompanionAI_v3.Planning.Planners
         private static bool IsSingleTargetMelee(PlannedAction a, out BaseUnitEntity target)
         {
             target = a.Target?.Entity as BaseUnitEntity;
-            var ability = a.Ability;
-            if (a.Type != ActionType.Attack || ability == null || target == null || !ability.IsMelee) return false;
+            if (a.Type != ActionType.Attack || target == null) return false;
             if (a.AllTargets != null && a.AllTargets.Count > 1) return false;
+            return IsSingleTargetMelee(a.Ability);
+        }
+
+        private static bool IsSingleTargetMelee(AbilityData ability)
+        {
+            if (ability == null || !ability.IsMelee) return false;
             var bp = ability.Blueprint;
-            if (bp == null || bp.IsHeroicAct || bp.IsDesperateMeasure || ability.IsCharge) return false;
+            if (bp == null || !bp.CanTargetEnemies || bp.IsHeroicAct || bp.IsDesperateMeasure || ability.IsCharge) return false;
             if (AbilityDatabase.IsGapCloser(ability) || AbilityDatabase.IsDangerousAoE(ability)) return false;
             var pattern = CombatAPI.GetPatternInfo(ability);
             return pattern == null || !pattern.IsValid;
+        }
+
+        /// <summary>AP of the cheapest available single-target melee attack, or -1 when there is none.</summary>
+        private static float CheapestSingleTargetMelee(Situation situation)
+        {
+            float best = -1f;
+            foreach (var a in situation.AvailableAttacks)
+            {
+                if (!IsSingleTargetMelee(a)) continue;
+                float c = CombatAPI.GetEffectiveAPCost(a);
+                if (best < 0f || c < best) best = c;
+            }
+            return best;
+        }
+
+        /// <summary>
+        /// Blood Phial has no charges left. Read from the full ability list, since the game drops an ability with
+        /// no charges from the available ones. False when she has no Blood Phial at all.
+        /// </summary>
+        private static bool PhialEmpty(BaseUnitEntity unit)
+        {
+            var raw = unit?.Abilities?.RawFacts;
+            if (raw == null) return false;
+            foreach (var fact in raw)
+            {
+                var ability = fact?.Data;
+                if (!BloodPhialPlanner.IsBloodPhial(ability)) continue;
+                return ability.GetAvailableForCastCount() == 0;
+            }
+            return false;
         }
 
         /// <summary>Raining Blood cast this turn and no single-target melee attack since, or its buff still on her.</summary>
