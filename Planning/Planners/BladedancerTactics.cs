@@ -514,11 +514,12 @@ namespace CompanionAI_v3.Planning.Planners
             return best;
         }
 
-        /// <summary>Landing tile bonus for Death From Above: more enemies hit on landing, and next to the oath target.</summary>
+        /// <summary>Landing tile bonus for Death From Above: more enemies hit on landing, next to the oath target, away from allies.</summary>
         public static float LandingBonus(AbilityData ability, Vector3 pos, Situation situation)
         {
             if (situation == null || !IsDeathFromAbove(ability)) return 0f;
-            float bonus = CountAdjacent(pos, situation.Enemies, situation.Unit, enemiesOnly: true) * 50f;
+            float bonus = CountAdjacent(pos, situation.Enemies, situation.Unit, enemiesOnly: true) * 50f
+                - CountAdjacent(pos, situation.Allies, situation.Unit, enemiesOnly: false) * BladedancerPositioning.AllyPenalty;
             var oathTarget = GetOathTarget(situation);
             if (oathTarget != null && CombatAPI.GetDistanceInTiles(pos, oathTarget) <= AdjacentTiles) bonus += 30f;
             return bonus;

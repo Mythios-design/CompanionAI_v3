@@ -698,6 +698,11 @@ namespace CompanionAI_v3.GameInterface
 
             var candidates = new List<PositionScore>();
 
+            // Bladedancers want tiles next to many enemies and no allies (Blade Dance hits everyone adjacent)
+            bool bladedancer = Planning.Planners.BladedancerPositioning.IsBladedancer(unit);
+            var bdEnemies = bladedancer ? (enemies ?? CombatAPI.GetEnemies(unit)) : null;
+            var bdAllies = bladedancer ? CombatAPI.GetAllies(unit) : null;
+
             foreach (var kvp in tiles)
             {
                 var aiCell = kvp.Value;
@@ -801,6 +806,8 @@ namespace CompanionAI_v3.GameInterface
                         posScore.MeleeAoESplashBonus = (splashCount - 1) * 12f;
                     }
                 }
+                if (bladedancer)
+                    posScore.MeleeAoESplashBonus += Planning.Planners.BladedancerPositioning.TileBonus(unit, pos, bdEnemies, bdAllies);
 
                 // ★ v3.74.2: 진동 방지 — 이전 위치 근처로 되돌아가면 패널티
                 if (lastMoveOrigin.HasValue)

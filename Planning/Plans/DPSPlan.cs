@@ -972,6 +972,16 @@ namespace CompanionAI_v3.Planning.Plans
                     didPlanAttack = true;
                     Log.Planning.Info($"[DPS] Phase 5.7: Self-AoE fallback (BladeDance finisher)");
                 }
+                else
+                {
+                    // Blade Dance blocked by an adjacent ally: step to a tile next to enemies and no allies first
+                    var stepClear = Planners.BladedancerPositioning.PlanStepClear(situation, actions, ref remainingAP, ref remainingMP, RoleName);
+                    if (stepClear != null)
+                    {
+                        actions.AddRange(stepClear);
+                        didPlanAttack = true;
+                    }
+                }
             }
 
             // ★ v3.36.0: Phase 5.8 — 0 AP 공격 소진 (Kick, Death Whisper, Break Through→Slash 등)
@@ -1328,6 +1338,11 @@ namespace CompanionAI_v3.Planning.Plans
             Planners.OperativeSequence.Arrange(actions, situation, ref remainingAP, RoleName);
 
             // Raining Blood: before a single-target melee attack, with AP left (ahead of Blood Phial)
+
+            // Bladedancer: with MP left, end next to as many enemies as possible and no allies
+
+            Planners.BladedancerPositioning.PlanEngagementMove(situation, actions, ref remainingMP, RoleName);
+
 
             remainingAP += rainingBloodReserve;
 

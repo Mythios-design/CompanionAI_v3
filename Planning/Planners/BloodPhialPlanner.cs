@@ -49,7 +49,11 @@ namespace CompanionAI_v3.Planning.Planners
                 var fromNode = from.GetNearestNodeXZ() as CustomGridNodeBase;
                 if (fromNode == null) return;
 
-                if (!FindBestCell(phial, situation, fromNode, out var cell, out int enemies, out int allies)) return;
+                if (!FindBestCell(phial, situation, fromNode, out var cell, out int enemies, out int allies, out string why))
+                {
+                    Log.Planning.Info($"[{roleName}] Blood Phial kept ({remainingAP:F0} AP left): {why}");
+                    return;
+                }
 
                 var action = PlannedAction.PositionalAttack(phial, cell.Vector3Position,
                     $"Blood Phial (last AP): {enemies} enemies, {allies} allies in the pool", cost, requiresEnemyOccupancy: false);
@@ -67,11 +71,15 @@ namespace CompanionAI_v3.Planning.Planners
         }
 
         private static bool FindBestCell(AbilityData phial, Situation situation, CustomGridNodeBase fromNode,
-            out CustomGridNodeBase best, out int bestEnemies, out int bestAllies)
+            out CustomGridNodeBase best, out int bestEnemies, out int bestAllies, out string why)
         {
             best = null;
             bestEnemies = bestAllies = 0;
+            why = null;
             int bestScore = 0;
+            int scored = 0, refused = 0;
+            string topRefusal = null;
+            int topRefusedScore = 0;
 
             var enemies = new List<BaseUnitEntity>();
             foreach (var e in situation.Enemies)
@@ -89,15 +97,27 @@ namespace CompanionAI_v3.Planning.Planners
             {
                 int e = Count(enemies, centre), a = Count(allies, centre);
                 int score = e * EnemyWeight + a * AllyWeight;
+                if (score > 0) scored++;
                 if (score <= bestScore) continue;
                 if (!phial.CanTargetFromNode(fromNode, centre, new TargetWrapper(centre.Vector3Position),
-                        out int _, out LosCalculations.CoverType _, out AbilityData.UnavailabilityReasonType? _))
+                        out int _, out LosCalculations.CoverType _, out AbilityData.UnavailabilityReasonType? reason))
+                {
+                    refused++;
+                    if (score > topRefusedScore)
+                    {
+                        topRefusedScore = score;
+                        topRefusal = $"best refused cell ({centre.Vector3Position.x:F1}, {centre.Vector3Position.z:F1}) {e} enemies/{a} allies: {reason?.ToString() ?? "refused"}";
+                    }
                     continue;
+                }
                 best = centre;
                 bestScore = score;
                 bestEnemies = e;
                 bestAllies = a;
             }
+            if (best == null)
+                why = $"{candidates.Count} cells near creatures, {scored} would cover someone, {refused} refused by the game" +
+                      (topRefusal != null ? $"; {topRefusal}" : "");
             return best != null;
         }
 

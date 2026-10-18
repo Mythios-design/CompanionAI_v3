@@ -833,6 +833,11 @@ namespace CompanionAI_v3.Planning.Plans
 
             // Raining Blood: before a single-target melee attack, with AP left (ahead of Blood Phial)
 
+            // Bladedancer: with MP left, end next to as many enemies as possible and no allies
+
+            Planners.BladedancerPositioning.PlanEngagementMove(situation, actions, ref remainingMP, RoleName);
+
+
             remainingAP += rainingBloodReserve;
 
             Planners.RainingBloodPlanner.Arrange(actions, situation, ref remainingAP, RoleName);
