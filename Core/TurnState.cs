@@ -284,6 +284,7 @@ namespace CompanionAI_v3.Core
             {
                 Planning.Planners.BladedancerTactics.OnActionExecuted(Unit, action);
                 Data.OncePerTurnAbilities.OnActionExecuted(Unit, action);
+                Planning.Planners.TacticalKnowledgePlanner.OnActionExecuted(Unit, action);
 
                 ConsecutiveFailures = 0;
 

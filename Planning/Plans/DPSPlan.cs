@@ -1339,6 +1339,9 @@ namespace CompanionAI_v3.Planning.Plans
             // Operative / Arbitrator shooters: debuff the enemy about to be shot, then shoot it
             Planners.OperativeSequence.Arrange(actions, situation, ref remainingAP, RoleName);
 
+            // Tactical Knowledge: harvest exploits after the setup and shot
+            Planners.TacticalKnowledgePlanner.Append(actions, situation, ref remainingAP, RoleName);
+
             // Raining Blood: before a single-target melee attack, with AP left (ahead of Blood Phial)
 
             // Bladedancer: with MP left, end next to as many enemies as possible and no allies

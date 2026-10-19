@@ -269,6 +269,9 @@ namespace CompanionAI_v3.Analysis
         /// <summary>Raining Blood, held out of the buff picks: put before a single-target melee attack (RainingBloodPlanner).</summary>
         public AbilityData HeldRainingBlood { get; set; }
 
+        /// <summary>Tactical Knowledge, held out of every list: placed after the Operative's setup and shot (TacticalKnowledgePlanner).</summary>
+        public AbilityData HeldTacticalKnowledge { get; set; }
+
         /// <summary>사용 가능한 공격</summary>
         public List<AbilityData> AvailableAttacks { get; set; } = new List<AbilityData>();
 
@@ -515,6 +518,7 @@ namespace CompanionAI_v3.Analysis
             LastResortBuffs.Clear();
             HeldBloodPhial = null;
             HeldRainingBlood = null;
+            HeldTacticalKnowledge = null;
             AvailableAttacks.Clear();
             AvailableHeals.Clear();
             AvailableDebuffs.Clear();

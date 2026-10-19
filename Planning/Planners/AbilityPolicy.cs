@@ -35,6 +35,13 @@ namespace CompanionAI_v3.Planning.Planners
                     situation.HeldBloodPhial = situation.HeldBloodPhial ?? a;
                     return true;
                 });
+                // Tactical Knowledge strips exploits: TacticalKnowledgePlanner places it after the Operative's setup and shot
+                RemoveWhere(situation, a =>
+                {
+                    if (!TacticalKnowledgePlanner.IsTacticalKnowledge(a)) return false;
+                    situation.HeldTacticalKnowledge = situation.HeldTacticalKnowledge ?? a;
+                    return true;
+                });
                 // Raining Blood only pays off before a single-target melee attack: RainingBloodPlanner places it
                 RemoveWhere(situation, a =>
                 {
