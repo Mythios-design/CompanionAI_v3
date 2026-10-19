@@ -61,6 +61,7 @@ A granted turn is wasted on an ally who can't act with it. `TurnGrantPolicy` dec
 ### 5. Positioning by role
 
 - **Ranged characters** end turns out of reach of melee enemies when they can, in cover from as many ranged enemies as possible, and don't move closer just to shoot the same targets they could already hit.
+- **Cover:** own cover counts double in tile choice. With MP left at the end of a plan, a ranged character who isn't engaged steps to the nearest tile with better cover, as long as it draws no attacks of opportunity, enters no hazard, isn't in reach of more melee enemies, and keeps as many enemies in weapon range (`CoverPositioning.cs`). Tanks stay visible.
 - **Melee characters** go where they hit hardest. For Bladedancers that means next to as many enemies as possible and no allies (see below).
 - **Line of sight:** a ranged character with no visible enemy heads for a tile that can see one.
 
@@ -83,7 +84,7 @@ A granted turn is wasted on an ally who can't act with it. `TurnGrantPolicy` dec
 2. **Death From Above as an attack** when the landing touches 2 or more enemies (and the oath target if one exists).
 3. **Death From Above as a gap closer** when the target is in range and a melee attack is still usable after landing.
 4. **Blade Dance** whenever enough enemies are adjacent and no ally is. If an ally blocks it, step to a tile touching enemies and no allies first.
-5. **End of turn:** with MP left, move next to more enemies and away from allies (not below 40% HP, never through attacks of opportunity).
+5. **End of turn (and the end of every plan):** with MP left, move to the tile touching the most enemies and no allies, at least one more enemy than now (not below 40% HP). Walking stays inside the enemies' threatened tiles, which draws no attacks of opportunity. A better tile outside that space is reached with Death From Above (0 AP, no attacks of opportunity) if it has a use left. When she keeps MP unused, the log says why.
 
 **Positioning:** +40 per adjacent enemy, -80 per adjacent ally, on melee attack tiles and jump landings. Long walks are fine; the archetype is built for movement.
 
@@ -164,7 +165,8 @@ A granted turn is wasted on an ally who can't act with it. `TurnGrantPolicy` dec
 
 - The damage estimate in Thordan's turn strategy still assumes four shots per turn ("Single×4"). That's cosmetic now that his turn is rearranged afterwards, but it skews the choice between strategies.
 - Expose Weakness is sometimes cast again on a target that already has it, as a leftover-AP spend.
-- Abilities not in the party yet: Precise Attack, Perfect Spot, Joint Analysis, Tactical Knowledge.
+- Abilities not in the party yet: Precise Attack, Perfect Spot, Joint Analysis.
+- **Tactical Knowledge** (Pasqal, `2a417cde46674ae0a5da8dcfd9ec621d`): after his setup and shot, centred on the enemy that removes the most exploits (all stacks of a lone enemy in the 5-cell circle, or 1 per enemy). The buff replaces itself, so it is cast only when it removes more than the buff already active this combat. 4 or more removed may take the AP of a leftover Analyse Enemies. Built: `TacticalKnowledgePlanner.cs`.
 
 > **Decision:** Idira is an Operative, so the one-target turn applies to her as built.
 

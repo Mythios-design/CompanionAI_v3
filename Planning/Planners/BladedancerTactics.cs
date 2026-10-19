@@ -94,7 +94,7 @@ namespace CompanionAI_v3.Planning.Planners
         private static string Guid(AbilityData ability) => ability?.Blueprint?.AssetGuid?.ToString();
 
         /// <summary>Uses of the ability left. The game reports -1 when it has no limit.</summary>
-        private static int UsesLeft(AbilityData ability)
+        public static int UsesLeft(AbilityData ability)
         {
             int uses = ability.GetAvailableForCastCount();
             return uses < 0 ? int.MaxValue : uses;

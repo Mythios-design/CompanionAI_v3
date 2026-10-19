@@ -115,40 +115,127 @@ namespace CompanionAI_v3.Planning.Planners
         }
 
         /// <summary>
-        /// End of plan with MP left: move to the reachable tile touching the most enemies and no allies, if that is
-        /// better than where she stands. Inserted before any turn-ending ability.
+        /// End of plan with MP left: move to the tile touching the most enemies and no allies, if that is better than
+        /// where she stands. Inserted before any turn-ending ability. Logs why when she keeps MP unused.
         /// </summary>
         public static void PlanEngagementMove(Situation situation, List<PlannedAction> actions, ref float remainingMP, string roleName)
         {
             var unit = situation?.Unit;
-            if (unit == null || actions == null || remainingMP < 1f || !situation.CanMove) return;
-            if (situation.HPPercent < EngageMinHP || !IsBladedancer(unit)) return;
+            if (unit == null || actions == null || !IsBladedancer(unit)) return;
             try
             {
                 // Blade Dance ends her movement, and a move already planned is the plan's own positioning
+                // (this runs again on the plan after that move)
                 foreach (var a in actions)
                     if (a.Type == ActionType.Move || IsBladeDance(a.Ability)) return;
 
-                Count(unit, unit.Position, situation.Enemies, situation.Allies, out int hereEnemies, out int hereAllies);
-                float hereScore = hereEnemies * EnemyBonus - hereAllies * AllyPenalty;
-
-                if (!FindBestTile(situation, remainingMP, 0, 1, out var tile, out int enemies, out float pathCost)) return;
-                float score = enemies * EnemyBonus - pathCost * PathCostPerTile;
-                if (score < hereScore + EnemyBonus - 0.01f) return;  // only for at least one more enemy (or shedding allies)
+                float apLeft = situation.CurrentAP;
+                foreach (var a in actions) apLeft -= a.APCost;
+                var move = PlanCrowdMove(situation, remainingMP, apLeft, roleName, out float pathCost);
+                if (move == null) return;
 
                 int insertAt = actions.Count;
                 for (int i = 0; i < actions.Count; i++)
                     if (actions[i].Ability != null && AbilityDatabase.IsTurnEnding(actions[i].Ability)) { insertAt = i; break; }
                 if (insertAt > 0 && actions[insertAt - 1].Type == ActionType.EndTurn) insertAt--;
-                actions.Insert(insertAt, PlannedAction.Move(tile, $"Engage {enemies} enemies (Bladedancer)"));
+                actions.Insert(insertAt, move);
                 remainingMP -= pathCost;
-                Log.Planning.Info($"[{roleName}] Bladedancer engagement move to ({tile.x:F1}, {tile.z:F1}): " +
-                    $"{enemies} enemies adjacent, no allies (here: {hereEnemies} enemies, {hereAllies} allies)");
             }
             catch (Exception ex)
             {
                 Log.Planning.Error(ex, $"[Bladedancer] engagement move failed for {unit.CharacterName}");
             }
+        }
+
+        /// <summary>
+        /// The move to a tile touching more enemies (and no allies), or null with the reason logged:
+        ///  - walking: tiles reachable without attacks of opportunity (staying inside the enemies' threatened tiles
+        ///    provokes none, the game's path check counts that);
+        ///  - otherwise Death From Above (0 AP, no attacks of opportunity, uses left) to a landing in jump range,
+        ///    for a better tile outside the threatened space.
+        /// Needs at least one more adjacent enemy than now (or shedding an adjacent ally), and 40% HP.
+        /// </summary>
+        public static PlannedAction PlanCrowdMove(Situation situation, float mp, float apLeft, string roleName, out float pathCost)
+        {
+            pathCost = 0f;
+            var unit = situation.Unit;
+            Count(unit, unit.Position, situation.Enemies, situation.Allies, out int hereEnemies, out int hereAllies);
+            float hereScore = hereEnemies * EnemyBonus - hereAllies * AllyPenalty;
+            string why = null;
+
+            if (situation.HPPercent < EngageMinHP) why = $"HP {situation.HPPercent:F0}% below {EngageMinHP:F0}%";
+            else if (!situation.CanMove) why = "can't move";
+            else
+            {
+                if (mp >= 1f && FindBestTile(situation, mp, 0, 1, out var tile, out int enemies, out float path))
+                {
+                    float score = enemies * EnemyBonus - path * PathCostPerTile;
+                    if (score >= hereScore + EnemyBonus - 0.01f)
+                    {
+                        pathCost = path;
+                        Log.Planning.Info($"[{roleName}] Bladedancer engagement move to ({tile.x:F1}, {tile.z:F1}): " +
+                            $"{enemies} enemies adjacent, no allies (here: {hereEnemies} enemies, {hereAllies} allies)");
+                        return PlannedAction.Move(tile, $"Engage {enemies} enemies (Bladedancer)");
+                    }
+                }
+
+                var hop = PlanJumpToCrowd(situation, apLeft, hereScore, roleName, hereEnemies, hereAllies);
+                if (hop != null) return hop;
+                why = mp < 1f ? "no MP left and no jump to more enemies"
+                    : $"no reachable tile or jump touches more enemies (here: {hereEnemies} enemies, {hereAllies} allies)";
+            }
+            if (mp >= 1f)
+                Log.Planning.Info($"[{roleName}] Bladedancer keeps {mp:F0} MP: {why}");
+            return null;
+        }
+
+        /// <summary>Death From Above to a landing touching more enemies and no allies.</summary>
+        private static PlannedAction PlanJumpToCrowd(Situation situation, float apLeft, float hereScore, string roleName,
+            int hereEnemies, int hereAllies)
+        {
+            var unit = situation.Unit;
+            AbilityData jump = null;
+            foreach (var a in situation.AvailableAttacks)
+            {
+                if (!BladedancerTactics.IsDeathFromAbove(a) || BladedancerTactics.UsesLeft(a) <= 0) continue;
+                if (CombatAPI.GetAbilityAPCost(a) > apLeft + 0.01f) continue;
+                jump = a;
+                break;
+            }
+            var casterNode = unit.CurrentUnwalkableNode;
+            if (jump == null || casterNode == null) return null;
+            float range = CombatAPI.GetAbilityRangeInTiles(jump);
+            if (range < 1f) return null;
+
+            var ownNodes = unit.GetOccupiedNodes();
+            bool avoidHazard = !CombatAPI.IsUnitInHazardZone(unit);
+            Vector3 best = default;
+            int bestEnemies = 0;
+            float bestScore = hereScore + EnemyBonus - 0.01f;
+            foreach (var node in GridAreaHelper.GetNodesSpiralAround(casterNode, unit.SizeRect, (int)Math.Ceiling(range)))
+            {
+                if (node == null || !node.Walkable || ownNodes.Contains(node)) continue;
+                if (node.TryGetUnit(out var occupant) && occupant != null && occupant.IsConscious) continue;
+                var pos = node.Vector3Position;
+                if (CombatAPI.GetDistanceInTiles(unit.Position, pos) > range) continue;
+                if (!BattlefieldGrid.Instance.ValidateNode(unit, node)) continue;
+                if (avoidHazard && CombatAPI.IsPositionInHazardZone(pos, unit)) continue;
+                Count(unit, pos, situation.Enemies, situation.Allies, out int e, out int a);
+                if (a > 0) continue;
+                float score = e * EnemyBonus;
+                if (score < bestScore) continue;
+                if (!jump.CanTargetFromNode(casterNode, node, new Kingmaker.Utility.TargetWrapper(pos),
+                        out int _, out Kingmaker.View.Covers.LosCalculations.CoverType _, out AbilityData.UnavailabilityReasonType? _))
+                    continue;
+                bestScore = score + 0.01f;
+                best = pos;
+                bestEnemies = e;
+            }
+            if (bestEnemies == 0) return null;
+            Log.Planning.Info($"[{roleName}] Bladedancer jumps to ({best.x:F1}, {best.z:F1}) with {jump.Name}: " +
+                $"{bestEnemies} enemies adjacent (here: {hereEnemies} enemies, {hereAllies} allies)");
+            return PlannedAction.PositionalAttack(jump, best, $"Death From Above into {bestEnemies} enemies",
+                CombatAPI.GetAbilityAPCost(jump), requiresEnemyOccupancy: false);
         }
 
         /// <summary>

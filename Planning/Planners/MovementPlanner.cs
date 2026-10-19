@@ -1754,6 +1754,13 @@ namespace CompanionAI_v3.Planning.Planners
         {
             if (situation?.Unit == null) return null;
             if (situation.EffectiveRangePreference != Settings.RangePreference.PreferMelee) return null;
+            // A Bladedancer wants the most enemies around her, not just one in reach: the crowd move decides,
+            // also when an enemy is already next to her (walk within threatened tiles, or jump)
+            if (BladedancerPositioning.IsBladedancer(situation.Unit) && situation.HasLivingEnemies)
+            {
+                var crowd = BladedancerPositioning.PlanCrowdMove(situation, situation.CurrentMP, situation.CurrentAP, "MovementPlanner", out _);
+                if (crowd != null) return crowd;
+            }
             if (!situation.CanMove || situation.CurrentMP <= 0f) return null;
             if (!situation.HasLivingEnemies || situation.Enemies == null) return null;
 
