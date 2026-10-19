@@ -1057,7 +1057,7 @@ namespace CompanionAI_v3.Analysis
         {
             try
             {
-                var weapon = unit.Body?.PrimaryHand?.Weapon;
+                var weapon = unit.Body?.PrimaryHand?.MaybeWeapon;
                 if (weapon == null) return false;
                 return weapon.Blueprint?.IsMelee == false;
             }

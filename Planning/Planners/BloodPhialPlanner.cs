@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Kingmaker.EntitySystem.Entities;
 using Kingmaker.Pathfinding;
 using Kingmaker.UnitLogic.Abilities;
@@ -74,6 +75,14 @@ namespace CompanionAI_v3.Planning.Planners
             if (situation.Enemies == null || !situation.Enemies.Exists(e => e != null && e.IsConscious && !e.LifeState.IsDead))
             {
                 Log.Planning.Info($"[{roleName}] Blood Phial kept: no enemies left");
+                return;
+            }
+            // A plan that walks but has no attack after the walk gets its attacks from the replan after the move;
+            // the phial waits for that plan instead of taking AP that an attack there would use
+            int lastMove = actions.FindLastIndex(a => a.Type == ActionType.Move);
+            if (lastMove >= 0 && !actions.Skip(lastMove + 1).Any(a => a.Type == ActionType.Attack))
+            {
+                Log.Planning.Info($"[{roleName}] Blood Phial kept: the plan still walks, attacks come after the move");
                 return;
             }
             try

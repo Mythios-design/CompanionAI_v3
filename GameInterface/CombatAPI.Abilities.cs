@@ -258,6 +258,8 @@ namespace CompanionAI_v3.GameInterface
                             // F4: 자해(HP 코스트) 능력 HP 게이트 — Blood Oath 등이 HP 임계값 아래에서 시전되어
                             //   빈사에 이르는 것 방지. 분석기가 걸러도 이 raw 재조회가 되살리던 누수 차단.
                             if (IsSelfDamageBlockedAtHP(abilityData, hpPercent)) continue;
+                            // Markers (Blood Oath) are never an attack of their own: their own planner decides when to use them
+                            if (Data.AbilityDatabase.IsMarker(abilityData) || Planning.Planners.BladedancerTactics.IsBloodOath(abilityData)) continue;
 
                             List<string> reasons;
                             if (IsAbilityAvailable(abilityData, out reasons))
@@ -305,6 +307,8 @@ namespace CompanionAI_v3.GameInterface
                             // F4: 자해 HP 게이트 (키벨라 Blood Oath 실증 누수 지점 — 게이트가 만든
                             //   "선호 공격 불가" 상태로 폴백 진입 후 여기서 자해 능력을 반환하던 경로).
                             if (IsSelfDamageBlockedAtHP(abilityData, hpPercent)) continue;
+                            // Markers (Blood Oath) are never an attack of their own: their own planner decides when to use them
+                            if (Data.AbilityDatabase.IsMarker(abilityData) || Planning.Planners.BladedancerTactics.IsBloodOath(abilityData)) continue;
 
                             List<string> reasons;
                             if (IsAbilityAvailable(abilityData, out reasons))
@@ -983,8 +987,8 @@ namespace CompanionAI_v3.GameInterface
 
             try
             {
-                // 공격자의 주 무기 데미지 타입 조회
-                var weapon = attacker.Body?.PrimaryHand?.Weapon;
+                // 공격자의 주 무기 데미지 타입 조회 (MaybeWeapon: an empty hand is normal, Weapon throws "Has no weapon in slot")
+                var weapon = attacker.Body?.PrimaryHand?.MaybeWeapon;
                 if (weapon?.Blueprint?.DamageType == null) return false;
 
                 var attackerDmgType = weapon.Blueprint.DamageType.Type;
@@ -1321,7 +1325,7 @@ namespace CompanionAI_v3.GameInterface
             try
             {
                 // 1. 무기의 OnHitActions에서 ContextActionPush 검사
-                var weapon = unit.Body?.PrimaryHand?.Weapon;
+                var weapon = unit.Body?.PrimaryHand?.MaybeWeapon;
                 if (weapon?.Blueprint != null)
                 {
                     var onHitEffect = weapon.Blueprint.OnHitActions;

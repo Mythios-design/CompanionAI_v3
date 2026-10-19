@@ -4,6 +4,8 @@ using System.Linq;
 using Kingmaker.EntitySystem.Entities;
 using Kingmaker.Pathfinding;
 using Kingmaker.UnitLogic.Abilities;
+using Kingmaker.Utility;
+using Kingmaker.View.Covers;
 using UnityEngine;
 using CompanionAI_v3.Analysis;
 using CompanionAI_v3.Core;
@@ -160,6 +162,11 @@ namespace CompanionAI_v3.Planning.Planners
                     if (CombatAPI.MetersToTiles(Vector3.Distance(standPos, aim.Position)) > range) continue;
                     var pattern = CombatAPI.GetAffectedNodes(cone, aim.Position, standPos);
                     if (pattern.IsEmpty) continue;
+                    // The game's own targeting from the stand tile (line of sight, range): the pattern alone isn't enough
+                    var aimNode = aim.CurrentUnwalkableNode;
+                    if (aimNode == null || !cone.CanTargetFromNode(stand, aimNode, new TargetWrapper(aim),
+                            out int _, out LosCalculations.CoverType _, out AbilityData.UnavailabilityReasonType? _))
+                        continue;
 
                     int enemyCount = 0, allyCount = 0;
                     var names = new List<string>();

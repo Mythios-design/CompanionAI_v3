@@ -1044,7 +1044,7 @@ namespace CompanionAI_v3.Analysis
             // 데미지 딜러 판단 (대략적)
             try
             {
-                var weapon = target.Body?.PrimaryHand?.Weapon;
+                var weapon = target.Body?.PrimaryHand?.MaybeWeapon;
                 if (weapon != null)
                 {
                     // 원거리 무기 = 위협

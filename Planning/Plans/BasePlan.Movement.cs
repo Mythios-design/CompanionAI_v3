@@ -431,6 +431,15 @@ namespace CompanionAI_v3.Planning.Plans
                     $"{RoleName} ultimate failed (Transcend Potential)", situation);
             }
 
+            // Phase 0.3: the weapon set in hand is empty (a save can be loaded with it active) and another set has
+            // weapons: take it up first, then the turn is planned with real attacks
+            var armedSwitch = PlanSwitchFromEmptySet(situation);
+            if (armedSwitch != null)
+            {
+                actions.Add(armedSwitch);
+                return CreatePlanWithSnapshot(actions, TurnPriority.DirectAttack, $"{RoleName} weapon switch (empty set in hand)", situation);
+            }
+
             // Phase 0.5: AoE Evacuation
             // F3: HasEvacuatedThisTurn 가드 (HasMovedThisTurn 아님).
             //   막으려는 것은 "대피→여전히 AoE→재대피" 루프뿐. 그런데 HasMovedThisTurn 은 공격 이동에도
@@ -517,6 +526,26 @@ namespace CompanionAI_v3.Planning.Plans
         /// Phase 1.8:  Approach Stance
         /// </summary>
         /// <returns>early return이 필요하면 TurnPlan, 아니면 null (계속 진행)</returns>
+        /// <summary>Switch to the first set with weapons when the set in hand has none; null otherwise.</summary>
+        private PlannedAction PlanSwitchFromEmptySet(Situation situation)
+        {
+            var unit = situation.Unit;
+            var sets = LoadoutProfiles.Get(unit);
+            if (sets == null) return null;
+            int current = unit.Body?.CurrentHandEquipmentSetIndex ?? 0;
+            if (current < 0 || current >= sets.Length || sets[current].HasWeapons) return null;
+            var turnState = Core.TurnOrchestrator.Instance?.GetCurrentTurnState();
+            if (turnState != null && turnState.WeaponSwitchCount > 0) return null;  // one try a turn
+            for (int i = 0; i < sets.Length; i++)
+            {
+                if (i == current || !sets[i].HasWeapons) continue;
+                string name = sets[i].Primary?.Name ?? sets[i].Secondary?.Name ?? $"Set {i}";
+                Log.Planning.Info($"[{RoleName}] Weapon set {current} in hand is empty - switching to set {i} ({name})");
+                return PlannedAction.WeaponSwitch(i, $"Empty set in hand - switch to {name}");
+            }
+            return null;
+        }
+
         protected TurnPlan ExecuteCommonEarlyPhases(PlanContext ctx)
         {
             // Phase 0 ~ 1.5: 기존 메서드에 위임
