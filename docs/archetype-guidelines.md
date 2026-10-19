@@ -42,6 +42,8 @@ From highest to lowest:
 4. **Other buffs, debuffs, heals and orders.**
 5. **Leftover spends.** Only AP left after everything else, like the Blood Phial throw.
 
+**Last-chance attack:** before any turn ends with AP left, one more look for an attack the game still allows (weapon attacks with free uses left, psychic powers, Blade Dance), from where the unit stands or after a walk that draws no attacks of opportunity, with the usual friendly-fire rules. Grenades, markers, Blood Phial, Raining Blood, Tactical Knowledge, Heroic Acts and Desperate Measures are left to their own rules. When AP stays unspent, the log says why (`LastChanceAttack.cs`).
+
 A setup is only worth AP if the thing it sets up actually happens this turn.
 
 ### 3. Never hit allies

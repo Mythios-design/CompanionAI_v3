@@ -960,6 +960,39 @@ namespace CompanionAI_v3.Core
         }
 
         /// <summary>
+        /// Before ending a turn with AP left, one more look for an attack it can still make (LastChanceAttack).
+        /// Returns that attack's execution, or null (and logs why the AP stays unspent).
+        /// </summary>
+        private ExecutionResult TryLastChanceAttack(BaseUnitEntity unit, string unitName, TurnState turnState, Situation situation)
+        {
+            if (situation == null || CombatAPI.GetCurrentAP(unit) < 0.5f) return null;
+            List<PlannedAction> actions;
+            string why;
+            try
+            {
+                actions = Planning.Planners.LastChanceAttack.Find(situation, turnState.LastChanceTried, out why);
+            }
+            catch (Exception ex)
+            {
+                Log.Engine.Error(ex, $"[Orchestrator] {unitName}: last-chance attack check failed");
+                return null;
+            }
+            if (actions == null)
+            {
+                Log.Engine.Info($"[Orchestrator] {unitName}: ending turn with AP={CombatAPI.GetCurrentAP(unit):F1} - {why}");
+                return null;
+            }
+            Log.Engine.Info($"[Orchestrator] {unitName}: last-chance attack - {actions[actions.Count - 1].Reason}");
+            turnState.Plan?.Cancel("Last-chance attack");
+            turnState.Plan = new TurnPlan(actions, TurnPriority.DirectAttack, "Last-chance attack",
+                situation.HPPercent, situation.NearestEnemyDistance, situation.NormalHittableCount,
+                situation.CurrentAP, situation.CurrentMP, CombatAPI.GetZeroAPAttacks(unit).Count);
+            TeamBlackboard.Instance.RegisterUnitPlan(unit.UniqueId, turnState.Plan);
+            CombatReportCollector.Instance.RecordPlan(turnState.Plan);
+            return ExecuteNextAction(unit, unitName, turnState, situation);
+        }
+
+        /// <summary>
         /// Before ending a turn with AP left, top up a gun whose magazine isn't full. Checked once per turn.
         /// Returns the reload cast, or null when there's nothing to do.
         /// </summary>
@@ -1210,6 +1243,9 @@ namespace CompanionAI_v3.Core
                     return ExecutionResult.Continue();
                 }
 
+                var lastChance = TryLastChanceAttack(unit, unitName, turnState, situation);
+                if (lastChance != null) return lastChance;
+
                 var topUp = TryEndOfTurnReload(unit, unitName, turnState, situation);
                 if (topUp != null) return topUp;
 
@@ -1240,6 +1276,8 @@ namespace CompanionAI_v3.Core
             // (cover / close in) its chance.
             if (nextAction.Type == ActionType.EndTurn)
             {
+                var lastChance = TryLastChanceAttack(unit, unitName, turnState, situation);
+                if (lastChance != null) return lastChance;
                 var topUp = TryEndOfTurnReload(unit, unitName, turnState, situation);
                 if (topUp != null) return topUp;
                 if (TryBeginEndOfTurnReposition(unit, unitName, turnState, CombatAPI.GetCurrentMP(unit)))
