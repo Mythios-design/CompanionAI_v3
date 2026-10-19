@@ -1252,6 +1252,7 @@ namespace CompanionAI_v3.GameInterface
                 if (avoidHazardZones && CombatAPI.IsPositionInHazardZone(pathResult.Position, unit))
                 {
                     Log.Engine.Info($"[MovementAPI] {unit.CharacterName}: A* approach REJECTED — destination in damaging AoE ({pathResult.Position.x:F1},{pathResult.Position.z:F1})");
+                    pathResult = null;
                 }
                 else
                 {
@@ -1356,6 +1357,15 @@ namespace CompanionAI_v3.GameInterface
                 predictedMP > 0 ? predictedMP : CombatAPI.GetCurrentMP(unit));
             if (sightStep != null) return sightStep;
 
+            // The route step: the straight-line closest tile can be a dead end across a pit or a wall, so it is
+            // only used when the pathfinder found no route
+            if (pathResult != null)
+            {
+                Log.Engine.Info($"[MovementAPI] {unit.CharacterName}: approach along the route to ({pathResult.Position.x:F1},{pathResult.Position.z:F1}), " +
+                    $"pathRisk={pathResult.PathRiskScore:F1}, can't attack {target.CharacterName} from there this turn");
+                return pathResult;
+            }
+
             if (closestCandidate != null)
             {
                 Log.Engine.Info($"[MovementAPI] {unit.CharacterName}: Euclidean approach (closest, hittable=0) to ({closestCandidate.Position.x:F1},{closestCandidate.Position.z:F1}) dist={closestDist:F1}m, pathRisk={lowestPathRisk:F1} to {target.CharacterName}");
@@ -1365,17 +1375,11 @@ namespace CompanionAI_v3.GameInterface
         }
 
         /// <summary>
-        /// ★ v3.9.42: A* 경로를 따라 접근 가능한 최적 위치 찾기
-        /// PathfindingService의 A* 패스파인딩으로 타겟까지의 전체 경로를 계산하고,
-        /// 그 경로 위에서 현재 MP로 도달 가능한 가장 먼 지점을 선택.
-        /// ★ 접근 경로 캐시: 같은 적에게 다중 턴 접근 시 이전 경로를 유지하여 진동 방지
+        /// The furthest tile reachable this turn along the pathfinder's route to the target. The route is the
+        /// shortest way there, so every later step is progress even when it bends away from the target in a straight
+        /// line (around a pit or a wall); straight-line distance is never used to judge it.
+        /// The route is cached per unit so a multi-turn approach keeps the same way round (no oscillation).
         /// </summary>
-        // ★ v3.9.64: A* 경로 접근 — Phase 1 (거리 가드) + 조건부 A* 우회
-        // Phase 1: A* 경로 중 적에게 더 가까운 노드 선택 (거리 가드)
-        // Phase 1 실패 시: Euclidean 진행도 측정 (최선 도달 타일이 현재보다 ≥1m 가까운지)
-        //   - 진행 ≥ 1m: 개활지 → null 반환 → Euclidean 폴백 사용
-        //   - 진행 < 1m: 벽 막힘 → A* 경로 따라 우회 (거리 가드 없이)
-        // 흐름: 캐시 Phase 1 → 신선한 Phase 1 → Euclidean 진행도 체크 → 분기.
         private static PositionScore FindApproachAlongPath(
             BaseUnitEntity unit,
             Vector3 targetPos,
@@ -1440,71 +1444,23 @@ namespace CompanionAI_v3.GameInterface
 
                 if (Main.IsDebugEnabled) Log.Engine.Debug($"[MovementAPI] {unit.CharacterName}: Fresh A* path has {pathNodes.Count} nodes, currentDist={currentDistToTarget:F1}");
 
-                // ── Step 3: Phase 1 — 거리 가드 (적에게 더 가까운 노드 선택) ──
+                // ── Step 3: furthest reachable step along the fresh route ──
                 var freshResult = SearchApproachPhase1(unit, pathNodes, 1, reachableTiles, targetPos, currentDistToTarget);
                 if (freshResult != null) return freshResult;
 
-                // ★ v3.9.64: Euclidean 진행도 기반 분기
-                // Euclidean 최선 타일이 현재보다 충분히 가까우면(≥1m) → null → Euclidean 사용.
-                // Euclidean이 막힘(벽 인접, 진행<1m)일 때만 → A* 경로 따라 벽 우회.
-                float bestEucDist = float.MaxValue;
-                foreach (var kvp in reachableTiles)
-                {
-                    var tileNode = kvp.Value.Node as CustomGridNodeBase;
-                    if (tileNode == null || !kvp.Value.IsCanStand) continue;
-                    float d = Vector3.Distance(tileNode.Vector3Position, targetPos);
-                    if (d < bestEucDist) bestEucDist = d;
-                }
-
-                float eucProgress = currentDistToTarget - bestEucDist;
-                if (eucProgress >= 1.0f)
-                {
-                    if (Main.IsDebugEnabled) Log.Engine.Debug($"[MovementAPI] {unit.CharacterName}: Euclidean progress={eucProgress:F1}m sufficient — deferring to Euclidean");
-                    return null;
-                }
-
-                // Euclidean 막힘 → A* 경로를 따라 벽 우회 (proximity matching)
-                if (Main.IsDebugEnabled) Log.Engine.Debug($"[MovementAPI] {unit.CharacterName}: Euclidean stuck (progress={eucProgress:F1}m) — following A* path detour");
-                for (int i = pathNodes.Count - 1; i >= 1; i--)
-                {
-                    var pathNode = pathNodes[i];
-                    if (!reachableTiles.TryGetValue(pathNode, out var aiCell)) continue;
-
-                    var node = aiCell.Node as CustomGridNodeBase;
-                    if (node == null || !aiCell.IsCanStand) continue;
-
-                    if (Vector3.Distance(node.Vector3Position, unit.Position) < 1.5f) continue;
-
-                    float distToTarget = Vector3.Distance(node.Vector3Position, targetPos);
-                    float pathRisk = aiCell.ProvokedAttacks * WEIGHT_AOO
-                        + aiCell.EnteredAoE * WEIGHT_AOE_ENTRY
-                        + aiCell.StepsInsideDamagingAoE * WEIGHT_DAMAGING_AOE_STEP;
-
-                    if (Main.IsDebugEnabled) Log.Engine.Debug($"[MovementAPI] {unit.CharacterName}: A* detour step {i}/{pathNodes.Count - 1}, dist={distToTarget:F1}m, pathRisk={pathRisk:F1}");
-
-                    return new PositionScore
-                    {
-                        Node = node,
-                        CanStand = true,
-                        DistanceScore = 100f - distToTarget,
-                        PathRiskScore = pathRisk
-                    };
-                }
-
-                if (Main.IsDebugEnabled) Log.Engine.Debug($"[MovementAPI] {unit.CharacterName}: No A* detour node found ({reachableTiles.Count} reachable tiles)");
+                if (Main.IsDebugEnabled) Log.Engine.Debug($"[MovementAPI] {unit.CharacterName}: no reachable tile further along the route ({reachableTiles.Count} reachable tiles)");
                 return null;
             }
             catch (Exception ex)
             {
-                if (Main.IsDebugEnabled) Log.Engine.Error(ex, $"[MovementAPI] FindApproachAlongPath error");
+                Log.Engine.Error(ex, $"[MovementAPI] FindApproachAlongPath error");
                 return null;
             }
         }
 
         /// <summary>
-        /// ★ v3.9.60: Phase 1 — A* 경로에서 적에게 더 가까운 도달 가능 노드 탐색
-        /// 경로 끝(타겟 쪽)부터 역방향 검색. 거리 가드 적용 (현재보다 가까운 노드만).
-        /// 현재 위치와 동일한 노드(1.5m 이내)는 제외.
+        /// The furthest reachable standable tile on the route from minIdx on, searching back from the target end.
+        /// The tile she stands on (within 1.5m) is skipped.
         /// </summary>
         private static PositionScore SearchApproachPhase1(
             BaseUnitEntity unit,
@@ -1524,13 +1480,6 @@ namespace CompanionAI_v3.GameInterface
 
                 float distToTarget = Vector3.Distance(node.Vector3Position, targetPos);
 
-                // 거리 가드: 현재보다 적에게 더 가까운 노드만
-                if (distToTarget >= currentDistToTarget)
-                {
-                    if (Main.IsDebugEnabled) Log.Engine.Debug($"[MovementAPI] {unit.CharacterName}: A* step {i} skipped — not closer (dist={distToTarget:F1} >= current={currentDistToTarget:F1})");
-                    continue;
-                }
-
                 // 현재 위치와 동일한 노드 제외 (부동소수점 오차 방지)
                 if (Vector3.Distance(node.Vector3Position, unit.Position) < 1.5f)
                 {
@@ -1542,7 +1491,8 @@ namespace CompanionAI_v3.GameInterface
                     + aiCell.EnteredAoE * WEIGHT_AOE_ENTRY
                     + aiCell.StepsInsideDamagingAoE * WEIGHT_DAMAGING_AOE_STEP;
 
-                if (Main.IsDebugEnabled) Log.Engine.Debug($"[MovementAPI] {unit.CharacterName}: A* approach node at step {i}/{pathNodes.Count - 1}, dist={distToTarget:F1}, pathRisk={pathRisk:F1}");
+                Log.Engine.Info($"[MovementAPI] {unit.CharacterName}: following the route: step {i} of {pathNodes.Count - 1}, " +
+                    $"{RouteLengthFrom(pathNodes, i):F1}m left along the route ({distToTarget:F1}m straight line, was {currentDistToTarget:F1}m), pathRisk={pathRisk:F1}");
 
                 return new PositionScore
                 {
@@ -1559,6 +1509,15 @@ namespace CompanionAI_v3.GameInterface
         /// <summary>
         /// ★ v3.9.42: 경로 위에서 주어진 위치에 가장 가까운 노드 인덱스 찾기
         /// </summary>
+        /// <summary>Length in metres of the route from step i to its end.</summary>
+        private static float RouteLengthFrom(List<GraphNode> path, int i)
+        {
+            float total = 0f;
+            for (int k = i; k < path.Count - 1; k++)
+                total += Vector3.Distance((Vector3)path[k].position, (Vector3)path[k + 1].position);
+            return total;
+        }
+
         private static int FindNearestNodeOnPath(Vector3 position, List<GraphNode> path)
         {
             int bestIdx = -1;

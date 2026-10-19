@@ -778,9 +778,8 @@ namespace CompanionAI_v3.GameInterface
                 }
                 else
                 {
-                    // ★ v3.9.54: A* 경로 기반 최적 이동 노드 선택 + 거리 가드 복원
-                    // A* 역방향 탐색 시 목적지에서 멀어지는 노드 방지
-                    float currentDistToDest = Vector3.Distance(unit.Position, destination);
+                    // The furthest reachable tile along the pathfinder's route to the destination. Straight-line
+                    // distance is not used: around a pit or a wall the route bends away before it gets closer.
                     var agent = unit.View?.MovementAgent;
                     if (agent != null)
                     {
@@ -800,21 +799,9 @@ namespace CompanionAI_v3.GameInterface
                                         // 정지 불가 셀 스킵 — 게임 CanStopAtNode(cells[node].IsCanStand) 기준
                                         if (!pathCell.IsCanStand) continue;
 
-                                        // 거리 가드: 현재보다 목적지에 더 가까운 노드만 선택
-                                        var pathNodeBase = fullPath.path[i] as CustomGridNodeBase;
-                                        if (pathNodeBase != null)
-                                        {
-                                            float nodeDist = Vector3.Distance(pathNodeBase.Vector3Position, destination);
-                                            if (nodeDist >= currentDistToDest)
-                                            {
-                                                if (Main.IsDebugEnabled) Log.Engine.Debug($"[CompanionAIDecisionNode] A* step {i} skipped — not closer (dist={nodeDist:F1} >= current={currentDistToDest:F1})");
-                                                continue;
-                                            }
-                                        }
-
                                         bestCell = pathCell;
                                         foundCell = true;
-                                        if (Main.IsDebugEnabled) Log.Engine.Debug($"[CompanionAIDecisionNode] A* path: found reachable node at step {i}/{fullPath.path.Count - 1}");
+                                        Log.Engine.Info($"[CompanionAIDecisionNode] {unit.CharacterName}: destination not reachable this turn, following the route: step {i} of {fullPath.path.Count - 1}");
                                         break;
                                     }
                                 }
@@ -822,7 +809,7 @@ namespace CompanionAI_v3.GameInterface
                         }
                         catch (Exception ex)
                         {
-                            if (Main.IsDebugEnabled) Log.Engine.Error(ex, $"[CompanionAIDecisionNode] A* path error");
+                            Log.Engine.Error(ex, $"[CompanionAIDecisionNode] A* path error");
                         }
                     }
 
