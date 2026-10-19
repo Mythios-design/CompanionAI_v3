@@ -91,7 +91,7 @@ namespace CompanionAI_v3.Planning.Planners
         }
 
         /// <summary>Sum over living enemies of the tile's cover from them: none 0, half 1, full or out of sight 2.</summary>
-        private static int CoverScore(BaseUnitEntity unit, CustomGridNodeBase node, List<BaseUnitEntity> enemies, out int seenBy)
+        public static int CoverScore(BaseUnitEntity unit, CustomGridNodeBase node, List<BaseUnitEntity> enemies, out int seenBy)
         {
             int score = 0;
             seenBy = 0;

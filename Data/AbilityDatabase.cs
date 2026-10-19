@@ -343,8 +343,8 @@ namespace CompanionAI_v3.Data
             // Captive Audience - 다음 공격에 출혈+고정 효과 부여
             { "ce30e102719a4671b660ffe5bff7c43d", new AbilityInfo("ce30e102719a4671b660ffe5bff7c43d", "CaptiveAudience", AbilityTiming.PreAttackBuff, flags: AbilityFlags.SelfTargetOnly) },
 
-            // Acrobatic Artistry - 턴 시작 위치로 복귀 (탈출 스킬)
-            { "1798e1237504457db15655280481d549", new AbilityInfo("1798e1237504457db15655280481d549", "AcrobaticArtistry", AbilityTiming.TurnEnding, flags: AbilityFlags.SelfTargetOnly) },
+            // Acrobatic Artistry: returns to the turn-start cell, replaying Death From Above (AcrobaticArtistryPlanner)
+            { "1798e1237504457db15655280481d549", new AbilityInfo("1798e1237504457db15655280481d549", "AcrobaticArtistry", AbilityTiming.Normal, flags: AbilityFlags.SelfTargetOnly) },
 
             // ★ v3.8.18: Veil of Blades - wound 소모 + 턴 종료 + 방어 영역 생성
             // 블루프린트: CanTargetPoint=true, Range=1, MinRange=1 (1타일 떨어진 지점에 영역 생성)
@@ -1627,29 +1627,6 @@ namespace CompanionAI_v3.Data
         }
 
         #endregion
-
-        /// <summary>
-        /// ★ v3.5.22: SpringAttack 능력인지 확인 (Acrobatic Artistry)
-        /// CustomSpringAttackQueue 컴포넌트를 가진 능력
-        /// - 갭클로저 사용 후 시작 위치로 복귀하는 능력
-        /// </summary>
-        public static bool IsSpringAttackAbility(AbilityData ability)
-        {
-            if (ability == null) return false;
-
-            try
-            {
-                // GUID로 직접 확인 (Acrobatic Artistry)
-                string guid = ability?.Blueprint?.AssetGuid?.ToString() ?? "";
-                if (guid == "1798e1237504457db15655280481d549")  // AcrobaticArtistry
-                    return true;
-
-                // 컴포넌트 기반 확인
-                var component = ability.Blueprint?.GetComponent<Kingmaker.UnitLogic.Abilities.Components.CustomSpringAttackQueue>();
-                return component != null;
-            }
-            catch { return false; }
-        }
 
         /// ★ v3.8.61: String 폴백 제거 — GUID 전용 (RevelInSlaughter_Soldier 등록 확인됨)
         public static bool IsRighteousFury(AbilityData ability)

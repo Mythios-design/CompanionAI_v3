@@ -854,12 +854,6 @@ namespace CompanionAI_v3.Planning.Plans
                         continue;
                     }
 
-                    if (AbilityDatabase.IsSpringAttackAbility(buff))
-                    {
-                        if (Main.IsDebugEnabled) Log.Planning.Debug($"[{RoleName}] Fallback buffs: Skip {buff.Name} (SpringAttack)");
-                        continue;
-                    }
-
                     // ★ v3.104.0: 이미 이 플랜에서 선택된 버프면 스킵 (Tank 인내 4× 중복 방지)
                     string buffGuid = buff.Blueprint?.AssetGuid?.ToString() ?? buff.Name ?? "";
                     if (_plannedBuffGuids.Contains(buffGuid))

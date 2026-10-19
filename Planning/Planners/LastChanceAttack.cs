@@ -20,16 +20,21 @@ namespace CompanionAI_v3.Planning.Planners
     /// Dance), from where the unit stands, or, for single-target attacks, after a walk that draws no attacks of
     /// opportunity. The game's own targeting and the friendly-fire rules decide; the most damaging option wins.
     /// Left to their own rules and never offered here: grenades, markers (Blood Oath), Blood Phial, Raining Blood,
-    /// Tactical Knowledge, Heroic Acts, Desperate Measures, heals, reloads, gap closers and turn-ending abilities.
-    /// Each ability is offered once a turn, so a cast the game refuses can't loop.
+    /// Tactical Knowledge, Acrobatic Artistry (weighed against this by the caller), Heroic Acts, Desperate Measures,
+    /// heals, reloads, gap closers and turn-ending abilities.
+    /// Each ability is offered once a turn (the caller records the returned key in tried), so a cast the game
+    /// refuses can't loop.
     /// </summary>
     public static class LastChanceAttack
     {
         private const int MaxWalkTiles = 80;
 
-        public static List<PlannedAction> Find(Situation situation, HashSet<string> tried, out string why)
+        public static List<PlannedAction> Find(Situation situation, HashSet<string> tried, out string why,
+            out float damage, out string triedKey)
         {
             why = null;
+            damage = 0f;
+            triedKey = null;
             var unit = situation?.Unit;
             if (unit == null) { why = "no unit"; return null; }
             float ap = CombatAPI.GetCurrentAP(unit);
@@ -80,7 +85,8 @@ namespace CompanionAI_v3.Planning.Planners
             }
             if (bestAbility != null)
             {
-                tried.Add(bestAbility.Blueprint.AssetGuid.ToString());
+                damage = bestDamage;
+                triedKey = bestAbility.Blueprint.AssetGuid.ToString();
                 return new List<PlannedAction> { Attack(bestAbility, bestTarget, unit, "from here") };
             }
 
@@ -88,10 +94,11 @@ namespace CompanionAI_v3.Planning.Planners
             float mp = CombatAPI.GetCurrentMP(unit);
             if (mp >= 1f && situation.CanMove)
             {
-                var walk = FindWalkAttack(situation, candidates, enemies, mp, out var ability, out var target);
+                var walk = FindWalkAttack(situation, candidates, enemies, mp, out var ability, out var target, out float walkDamage);
                 if (walk.HasValue)
                 {
-                    tried.Add(ability.Blueprint.AssetGuid.ToString());
+                    damage = walkDamage;
+                    triedKey = ability.Blueprint.AssetGuid.ToString();
                     return new List<PlannedAction>
                     {
                         PlannedAction.Move(walk.Value, $"Last chance: walk to attack {target.CharacterName}"),
@@ -115,7 +122,8 @@ namespace CompanionAI_v3.Planning.Planners
             if (AbilityDatabase.IsReload(a) || AbilityDatabase.IsHealing(a) || AbilityDatabase.IsMarker(a)
                 || AbilityDatabase.IsGapCloser(a) || AbilityDatabase.IsTurnEnding(a)) return false;
             if (BladedancerTactics.IsBloodOath(a) || BloodPhialPlanner.IsBloodPhial(a)
-                || RainingBloodPlanner.IsRainingBlood(a) || TacticalKnowledgePlanner.IsTacticalKnowledge(a)) return false;
+                || RainingBloodPlanner.IsRainingBlood(a) || TacticalKnowledgePlanner.IsTacticalKnowledge(a)
+                || AcrobaticArtistryPlanner.IsAcrobaticArtistry(a)) return false;
             if (CombatAPI.IsPsychicAbility(a) && !CombatAPI.IsPsychicSafeToUse(a)) return false;
             return true;
         }
@@ -134,8 +142,9 @@ namespace CompanionAI_v3.Planning.Planners
         }
 
         private static Vector3? FindWalkAttack(Situation situation, List<AbilityData> candidates, List<BaseUnitEntity> enemies,
-            float mp, out AbilityData ability, out BaseUnitEntity target)
+            float mp, out AbilityData ability, out BaseUnitEntity target, out float damage)
         {
+            damage = 0f;
             ability = null;
             target = null;
             var unit = situation.Unit;
@@ -176,7 +185,7 @@ namespace CompanionAI_v3.Planning.Planners
                         if (dmg <= bestDamage) continue;
                         bestDamage = dmg; ability = a; target = e;
                     }
-                if (ability != null) return node.Vector3Position;  // nearest tile with any attack
+                if (ability != null) { damage = bestDamage; return node.Vector3Position; }  // nearest tile with any attack
             }
             return null;
         }

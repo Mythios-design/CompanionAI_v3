@@ -968,31 +968,56 @@ namespace CompanionAI_v3.Core
         }
 
         /// <summary>
-        /// Before ending a turn with AP left, one more look for an attack it can still make (LastChanceAttack).
-        /// Returns that attack's execution, or null (and logs why the AP stays unspent).
+        /// Before ending a turn with AP left, one more look for an attack it can still make (LastChanceAttack), and
+        /// for Acrobatic Artistry (AcrobaticArtistryPlanner). Acrobatic Artistry goes first when its replayed landings
+        /// out-damage the best remaining attack; as an escape it waits until no attack is left. It doesn't end the
+        /// turn, so what is left of the AP is looked at again afterwards.
+        /// Returns that action's execution, or null (and logs why the AP stays unspent).
         /// </summary>
         private ExecutionResult TryLastChanceAttack(BaseUnitEntity unit, string unitName, TurnState turnState, Situation situation)
         {
             if (situation == null || CombatAPI.GetCurrentAP(unit) < 0.5f) return null;
             List<PlannedAction> actions;
-            string why;
+            PlannedAction acrobatics = null;
+            string why, acrobaticsWhy = null, triedKey;
+            float damage, replayDamage = 0f;
+            bool escape = false;
             try
             {
-                actions = Planning.Planners.LastChanceAttack.Find(situation, turnState.LastChanceTried, out why);
+                actions = Planning.Planners.LastChanceAttack.Find(situation, turnState.LastChanceTried, out why, out damage, out triedKey);
+                if (!turnState.AcrobaticArtistryTried && situation.HeldAcrobaticArtistry != null)
+                    acrobatics = Planning.Planners.AcrobaticArtistryPlanner.Find(situation, out acrobaticsWhy, out replayDamage, out escape);
             }
             catch (Exception ex)
             {
                 Log.Engine.Error(ex, $"[Orchestrator] {unitName}: last-chance attack check failed");
                 return null;
             }
-            if (actions == null)
+            if (acrobaticsWhy != null)
+                Log.Engine.Info($"[Orchestrator] {unitName}: Acrobatic Artistry skipped - {acrobaticsWhy}");
+
+            bool acrobaticsFirst = acrobatics != null && (actions == null || (replayDamage > damage && replayDamage > 0f));
+            if (acrobaticsFirst)
+            {
+                turnState.AcrobaticArtistryTried = true;
+                // An escape stays at the turn-start cell: no end-of-turn advance back toward the enemy
+                if (escape) turnState.EndOfTurnRepositionDone = true;
+                actions = new List<PlannedAction> { acrobatics };
+                Log.Engine.Info($"[Orchestrator] {unitName}: {acrobatics.Reason} (replay {replayDamage:F0} vs best attack {damage:F0})");
+            }
+            else if (actions == null)
             {
                 Log.Engine.Info($"[Orchestrator] {unitName}: ending turn with AP={CombatAPI.GetCurrentAP(unit):F1} - {why}");
                 return null;
             }
-            Log.Engine.Info($"[Orchestrator] {unitName}: last-chance attack - {actions[actions.Count - 1].Reason}");
-            turnState.Plan?.Cancel("Last-chance attack");
-            turnState.Plan = new TurnPlan(actions, TurnPriority.DirectAttack, "Last-chance attack",
+            else
+            {
+                turnState.LastChanceTried.Add(triedKey);
+                Log.Engine.Info($"[Orchestrator] {unitName}: last-chance attack - {actions[actions.Count - 1].Reason}");
+            }
+            string label = acrobaticsFirst ? "Acrobatic Artistry" : "Last-chance attack";
+            turnState.Plan?.Cancel(label);
+            turnState.Plan = new TurnPlan(actions, TurnPriority.DirectAttack, label,
                 situation.HPPercent, situation.NearestEnemyDistance, situation.NormalHittableCount,
                 situation.CurrentAP, situation.CurrentMP, CombatAPI.GetZeroAPAttacks(unit).Count);
             TeamBlackboard.Instance.RegisterUnitPlan(unit.UniqueId, turnState.Plan);

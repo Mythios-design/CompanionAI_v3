@@ -42,6 +42,13 @@ namespace CompanionAI_v3.Planning.Planners
                     situation.HeldTacticalKnowledge = situation.HeldTacticalKnowledge ?? a;
                     return true;
                 });
+                // Acrobatic Artistry replays this turn's jumps and walks home: offered at the end of the turn
+                RemoveWhere(situation, a =>
+                {
+                    if (!AcrobaticArtistryPlanner.IsAcrobaticArtistry(a)) return false;
+                    situation.HeldAcrobaticArtistry = situation.HeldAcrobaticArtistry ?? a;
+                    return true;
+                });
                 // Raining Blood only pays off before a single-target melee attack: RainingBloodPlanner places it
                 RemoveWhere(situation, a =>
                 {

@@ -88,13 +88,15 @@ A granted turn is wasted on an ally who can't act with it. `TurnGrantPolicy` dec
 4. **Blade Dance** whenever enough enemies are adjacent and no ally is. If an ally blocks it, step to a tile touching enemies and no allies first.
 5. **End of turn (and the end of every plan):** with MP left, move to the tile touching the most enemies and no allies, at least one more enemy than now (not below 40% HP). Walking stays inside the enemies' threatened tiles, which draws no attacks of opportunity. A better tile outside that space is reached with Death From Above (0 AP, no attacks of opportunity) if it has a use left. When she keeps MP unused, the log says why.
 
+6. **Acrobatic Artistry** (1 AP, doesn't end the turn) at the end of the turn, never inside a plan. The game replays this turn's jumps newest first, each landing back where that jump took off, then walks her free to her turn-start cell, with no attacks of opportunity. Used for **replay** when those take-off spots touch living enemies and no allies, and the replay's estimated damage beats her best remaining attack (otherwise the attack goes first). Used to **escape** below 40% HP when the turn-start cell is safer (fewer melee enemies reach it, or equal and better cover), after her attacks are spent; no end-of-turn advance follows an escape.
+
 **Positioning:** +40 per adjacent enemy, -80 per adjacent ally, on melee attack tiles and jump landings. Long walks are fine; the archetype is built for movement.
 
-**Built:** `BladedancerTactics.cs` (oath choice and reward tracking, Death From Above rules, holding ally heals during an oath), `BladedancerPositioning.cs` (tile scoring, stepping clear, engagement move).
+**Built:** `BladedancerTactics.cs` (oath choice and reward tracking, Death From Above rules, holding ally heals during an oath), `BladedancerPositioning.cs` (tile scoring, stepping clear, engagement move), `AcrobaticArtistryPlanner.cs` (replay and escape test, called from the orchestrator's last-chance step).
 
 **Not built yet:**
 
-- Abilities not in the party yet: Captive Audience, Acrobatic Artistry, Veil of Blades, Oath of Vengeance.
+- Abilities not in the party yet: Captive Audience, Veil of Blades, Oath of Vengeance. Acrobatic Artistry is built but untested until she takes it.
 
 > **Decision (final, 2026-10-18):** option A. The game pays the oath back only if her *next* attack on the sworn enemy kills it, and each oath costs 14 to 28% of her HP. So she swears only on the lowest-HP enemy her next attack can kill, at most once a turn, and attacks it next. "Can kill" means on her best damage roll, not her average (changed after a fight where her average hit never reached any enemy's HP and she swore no oath). Earlier the same day the rule was "an oath every turn on any enemy in reach" with no HP limit; in tests that cost her up to 55% HP in one turn with nothing back. No HP limit. The leftover-AP step never casts Blood Oath.
 

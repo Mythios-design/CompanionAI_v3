@@ -197,6 +197,9 @@ namespace CompanionAI_v3.Core
         /// <summary>Abilities the last-chance attack already offered this turn (each gets one try, so it can't loop).</summary>
         public HashSet<string> LastChanceTried { get; } = new HashSet<string>();
 
+        /// <summary>True once Acrobatic Artistry has been offered at the end of this turn (one try, so it can't loop).</summary>
+        public bool AcrobaticArtistryTried { get; set; }
+
         /// <summary>
         /// 이동 설정 실패가 반복되어 이번 턴 나머지 동안 이동 계획을 차단 (Analyzer 가 CanMove=false 로 미러,
         /// Orchestrator 는 남은 Move 액션을 스킵). 같은 목적지를 재선택하는 replan 루프를 끊고

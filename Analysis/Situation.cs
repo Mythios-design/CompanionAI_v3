@@ -272,6 +272,9 @@ namespace CompanionAI_v3.Analysis
         /// <summary>Tactical Knowledge, held out of every list: placed after the Operative's setup and shot (TacticalKnowledgePlanner).</summary>
         public AbilityData HeldTacticalKnowledge { get; set; }
 
+        /// <summary>Acrobatic Artistry, held out of every list: offered at the end of the turn (AcrobaticArtistryPlanner).</summary>
+        public AbilityData HeldAcrobaticArtistry { get; set; }
+
         /// <summary>사용 가능한 공격</summary>
         public List<AbilityData> AvailableAttacks { get; set; } = new List<AbilityData>();
 
@@ -519,6 +522,7 @@ namespace CompanionAI_v3.Analysis
             HeldBloodPhial = null;
             HeldRainingBlood = null;
             HeldTacticalKnowledge = null;
+            HeldAcrobaticArtistry = null;
             AvailableAttacks.Clear();
             AvailableHeals.Clear();
             AvailableDebuffs.Clear();
