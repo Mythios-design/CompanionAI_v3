@@ -229,7 +229,8 @@ namespace CompanionAI_v3.Planning.Plans
                 if (plannedAbilityUseCounts != null && !string.IsNullOrEmpty(buffGuid))
                 {
                     plannedAbilityUseCounts.TryGetValue(buffGuid, out int plannedUses);
-                    if (plannedUses > 0 && OncePerTurnAbilities.IsOncePerTurn(buff))
+                    // Heroic Acts (Finest Hour!) can only be used once; 0 AP kept re-adding them for every ally
+                    if (plannedUses > 0 && (OncePerTurnAbilities.IsOncePerTurn(buff) || AbilityDatabase.IsHeroicAct(buff) || buff.Blueprint?.IsHeroicAct == true || ExtraTurnValue.IsFinestHour(buff)))
                     {
                         if (Main.IsDebugEnabled) Log.Planning.Debug($"[{RoleName}] Skip {buff.Name}: once per turn and already planned");
                         continue;

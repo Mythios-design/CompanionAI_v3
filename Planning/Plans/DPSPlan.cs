@@ -632,6 +632,9 @@ namespace CompanionAI_v3.Planning.Plans
                     List<string> unavailReasons;
                     if (!CombatAPI.IsAbilityAvailable(ability, out unavailReasons))
                         break;
+                    // Weapon attacks already used up by the plan (one a turn plus free uses)
+                    if (plannedAbilityGuids.Contains(Planners.AttackPlanner.WeaponCapMarker + ability.Blueprint?.AssetGuid))
+                        break;
 
                     float apCost = CombatAPI.GetAbilityAPCost(ability);
                     if (remainingAP < apCost) break;
@@ -660,6 +663,7 @@ namespace CompanionAI_v3.Planning.Plans
                     action.FailurePolicy = GroupFailurePolicy.SkipRemainingInGroup;
                     actions.Add(action);
                     remainingAP -= apCost;
+                    if (action.Type == ActionType.Attack) ExcludeSpentWeaponAttacks(action, situation, plannedAbilityGuids);
                 }
 
                 if (actions.Count > actionsBeforeDeferred)

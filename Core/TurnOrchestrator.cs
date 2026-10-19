@@ -309,30 +309,8 @@ namespace CompanionAI_v3.Core
             {
                 // ★ v3.9.14: AP 정체 감지 — AP가 줄지 않고 공격도 못 하면 무한루프 의심
                 float currentGameAP = CombatAPI.GetCurrentAP(unit);
-                if (turnState.APAtLastPlanStart >= 0)  // 첫 플랜이 아닌 경우만
-                {
-                    bool apUnchanged = Math.Abs(currentGameAP - turnState.APAtLastPlanStart) < 0.01f;
-                    bool noAttack = !turnState.HasAttackedThisTurn;
-
-                    if (apUnchanged && noAttack)
-                    {
-                        turnState.StagnantPlanCount++;
-                        Log.Engine.Warn($"[Orchestrator] {unitName}: Stagnant plan #{turnState.StagnantPlanCount} " +
-                            $"(AP={currentGameAP:F1} unchanged, no attack)");
-
-                        if (turnState.StagnantPlanCount >= 3)
-                        {
-                            Log.Engine.Warn($"[Orchestrator] {unitName}: ★ Ending turn — {turnState.StagnantPlanCount} " +
-                                $"stagnant plans (AP={currentGameAP:F1}, actions={turnState.ActionCount})");
-                            return ExecutionResult.EndTurn("Stagnant AP - no progress");
-                        }
-                    }
-                    else
-                    {
-                        turnState.StagnantPlanCount = 0;  // 진전 있으면 리셋
-                    }
-                }
-                turnState.APAtLastPlanStart = currentGameAP;
+                if (IsStagnant(turnState, currentGameAP, unitName, "Orchestrator"))
+                    return ExecutionResult.EndTurn("Stagnant AP - no progress");
 
                 Log.Engine.Info($"[Orchestrator] {unitName}: Creating new turn plan (continuation={turnState.Plan?.IsComplete ?? false})");
                 turnState.Plan = _planner.CreatePlan(situation, turnState);
@@ -595,25 +573,8 @@ namespace CompanionAI_v3.Core
             {
                 // AP 정체 감지 (일반 경로와 동일)
                 float currentGameAP = CombatAPI.GetCurrentAP(unit);
-                if (turnState.APAtLastPlanStart >= 0)
-                {
-                    bool apUnchanged = Math.Abs(currentGameAP - turnState.APAtLastPlanStart) < 0.01f;
-                    bool noAttack = !turnState.HasAttackedThisTurn;
-                    if (apUnchanged && noAttack)
-                    {
-                        turnState.StagnantPlanCount++;
-                        if (turnState.StagnantPlanCount >= 3)
-                        {
-                            Log.Engine.Warn($"[LLM Judge] {unitName}: Ending turn — {turnState.StagnantPlanCount} stagnant plans");
-                            return ExecutionResult.EndTurn("Stagnant AP - no progress");
-                        }
-                    }
-                    else
-                    {
-                        turnState.StagnantPlanCount = 0;
-                    }
-                }
-                turnState.APAtLastPlanStart = currentGameAP;
+                if (IsStagnant(turnState, currentGameAP, unitName, "LLM Judge"))
+                    return ExecutionResult.EndTurn("Stagnant AP - no progress");
 
                 // 후보 플랜 생성 (동기) — ScorerWeights 전달
                 var role = GetEffectiveRole(unit, situation);
@@ -938,6 +899,53 @@ namespace CompanionAI_v3.Core
         #endregion
 
         #region ProcessTurn Sub-Methods (v3.5.36)
+
+        /// <summary>
+        /// Called before each new plan. A plan counts as stagnant when AP didn't go down, nothing attacked and no
+        /// action succeeded since the last plan; 3 in a row end the turn (a planning loop). Successful 0 AP actions
+        /// (a move, a weapon switch, Blood Oath) are progress, but 8 plans in a row with only those and no AP spent
+        /// also end the turn, so a back-and-forth can't run forever. Records the baseline for the next plan.
+        /// </summary>
+        private static bool IsStagnant(TurnState turnState, float currentAP, string unitName, string tag)
+        {
+            int successNow = turnState.SuccessfulActionCount;
+            bool end = false;
+            if (turnState.APAtLastPlanStart >= 0)  // not the first plan
+            {
+                bool apUnchanged = Math.Abs(currentAP - turnState.APAtLastPlanStart) < 0.01f;
+                bool noAttack = !turnState.HasAttackedThisTurn;
+                bool acted = successNow > turnState.SuccessAtLastPlanStart;
+                if (apUnchanged && noAttack && !acted)
+                {
+                    turnState.StagnantPlanCount++;
+                    Log.Engine.Warn($"[{tag}] {unitName}: Stagnant plan #{turnState.StagnantPlanCount} (AP={currentAP:F1} unchanged, nothing done)");
+                    if (turnState.StagnantPlanCount >= 3)
+                    {
+                        Log.Engine.Warn($"[{tag}] {unitName}: ★ Ending turn — {turnState.StagnantPlanCount} stagnant plans (AP={currentAP:F1}, actions={turnState.ActionCount})");
+                        end = true;
+                    }
+                }
+                else if (apUnchanged && noAttack)
+                {
+                    turnState.StagnantPlanCount = 0;
+                    turnState.ZeroAPProgressStreak++;
+                    if (turnState.ZeroAPProgressStreak >= 8)
+                    {
+                        Log.Engine.Warn($"[{tag}] {unitName}: ★ Ending turn — {turnState.ZeroAPProgressStreak} plans of 0 AP actions only (AP={currentAP:F1})");
+                        end = true;
+                    }
+                }
+                else
+                {
+                    turnState.StagnantPlanCount = 0;
+                    turnState.ZeroAPProgressStreak = 0;
+                }
+            }
+            turnState.APAtLastPlanStart = currentAP;
+            turnState.SuccessAtLastPlanStart = successNow;
+            return end;
+        }
+
 
         /// <summary>
         /// Before ending a turn with MP left, give ranged characters one chance to move somewhere safer and

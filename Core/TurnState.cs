@@ -162,6 +162,22 @@ namespace CompanionAI_v3.Core
         /// <summary>★ v3.9.14: 마지막 계획 생성 시점의 게임 AP (정체 감지용)</summary>
         public float APAtLastPlanStart { get; set; } = -1f;
 
+        /// <summary>Successful actions when the last plan started (stagnation check).</summary>
+        public int SuccessAtLastPlanStart { get; set; }
+
+        /// <summary>Plans in a row where only 0 AP actions succeeded (moves, switches, 0 AP casts).</summary>
+        public int ZeroAPProgressStreak { get; set; }
+
+        public int SuccessfulActionCount
+        {
+            get
+            {
+                int n = 0;
+                foreach (var a in ExecutedActions) if (a.WasSuccessful == true) n++;
+                return n;
+            }
+        }
+
         /// <summary>★ v3.9.14: AP 정체 연속 횟수 (AP 변화 없고 공격 안 했으면 +1, 3회 시 EndTurn)</summary>
         public int StagnantPlanCount { get; set; }
 
