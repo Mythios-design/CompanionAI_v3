@@ -111,12 +111,13 @@ namespace CompanionAI_v3.GameInterface
             /// ★ v3.111.15 Phase C.1: HideValue 정규화로 max 180 → 110.
             ///   TacticalAdjustment 계수(MovementAPI:2293,2314)는 미조정 — 인게임 튜닝 시 재검토.
             /// </summary>
+            // Doubled (max 220): own cover used to lose to small distance and attack differences
             public float HideScore =>
-                HideFullComplete * 50f +
-                HideAnyComplete * 20f +
-                HideFullRatio * 15f +
-                HideAnyRatio * 15f +
-                HideValue * 10f;
+                HideFullComplete * 100f +
+                HideAnyComplete * 40f +
+                HideFullRatio * 30f +
+                HideAnyRatio * 30f +
+                HideValue * 20f;
 
             /// <summary>
             /// ★ v3.110.19 Phase 1a: HideScoreComponents → PositionScore Hide fields 일괄 복사.

@@ -689,6 +689,9 @@ namespace CompanionAI_v3.Planning.Plans
 
             Planners.BladedancerPositioning.PlanEngagementMove(situation, actions, ref remainingMP, RoleName);
 
+            // Ranged characters: with MP left, step into better cover
+            Planners.CoverPositioning.PlanCoverMove(situation, actions, ref remainingMP, RoleName);
+
 
             remainingAP += rainingBloodReserve;
 
