@@ -21,8 +21,9 @@ namespace CompanionAI_v3.Planning.Planners
     /// where she took off, then walks free to her turn-start cell. Nothing in it provokes attacks of opportunity.
     /// Held out of every plan (AbilityPolicy) and offered at the end of the turn, from TurnOrchestrator next to the
     /// last-chance attack, when either:
-    ///  - Replay: the replayed landings (the take-off spots) are next to living enemies and no allies, worth the
-    ///    estimated Death From Above damage on those enemies; or
+    ///  - Replay: the replayed landings (the take-off spots) are next to living enemies, worth the landing's flat
+    ///    damage (Weapon Skill bonus + Agility bonus) on each. Landings never hit allies. A landing next to a sworn
+    ///    enemy it won't kill would spend the oath, so then the replay is worth nothing; or
     ///  - Escape: HP is under 40% and the turn-start cell is safer than where she stands (fewer melee enemies can
     ///    reach it, or the same number and better cover).
     /// </summary>
@@ -100,47 +101,35 @@ namespace CompanionAI_v3.Planning.Planners
         }
 
         /// <summary>
-        /// Damage of the replayed jumps: each lands where its original jump took off, hitting the enemies next to
-        /// that spot. A landing next to an ally makes the whole replay worthless (nothing hits allies on purpose).
+        /// Damage of the replayed jumps: each lands where its original jump took off, hitting every enemy next to that
+        /// spot for the landing's flat damage. None if a landing would spend a Blood Oath without killing.
         /// </summary>
         private static float ReplayDamage(Situation situation, UnitPartSpringAttack part, List<BaseUnitEntity> enemies, out string why)
         {
             var entries = part.Entries;
             if (entries == null || entries.Count == 0) { why = "no Death From Above this turn"; return 0f; }
-            var unit = situation.Unit;
-            var dfa = FindDeathFromAbove(unit);
+            int damage = BladedancerTactics.LandingDamage(situation.Unit);
             float total = 0f;
             int landings = 0, hits = 0;
             foreach (var entry in entries)
             {
                 if (entry == null || entry.NewPosition == entry.OldPosition) continue;
                 landings++;
-                if (situation.Allies != null)
-                    foreach (var a in situation.Allies)
-                        if (a != null && a != unit && a.IsConscious && !a.LifeState.IsDead
-                            && CombatAPI.GetDistanceInTiles(entry.OldPosition, a) <= AdjacentTiles)
-                        {
-                            why = $"a landing is next to {a.CharacterName}";
-                            return 0f;
-                        }
+                var sworn = BladedancerTactics.LandingSpendsOath(situation, entry.OldPosition);
+                if (sworn != null)
+                {
+                    why = $"a landing would spend the Blood Oath on {sworn.CharacterName}";
+                    return 0f;
+                }
                 foreach (var e in enemies)
                 {
                     if (CombatAPI.GetDistanceInTiles(entry.OldPosition, e) > AdjacentTiles) continue;
                     hits++;
-                    total += dfa != null ? Math.Max(1f, CombatAPI.EstimateDamage(dfa, e)) : 1f;
+                    total += Math.Min(damage, CombatAPI.GetActualHP(e));
                 }
             }
-            why = landings == 0 ? "no jump moved her" : $"{landings} landings touching {hits} enemies";
+            why = landings == 0 ? "no jump moved her" : $"{landings} landings touching {hits} enemies ({damage} damage each)";
             return total;
-        }
-
-        private static AbilityData FindDeathFromAbove(BaseUnitEntity unit)
-        {
-            var raw = unit.Abilities?.RawFacts;
-            if (raw == null) return null;
-            foreach (var fact in raw)
-                if (BladedancerTactics.IsDeathFromAbove(fact?.Data)) return fact.Data;
-            return null;
         }
 
         private static bool SaferAtStart(BaseUnitEntity unit, Vector3 start, List<BaseUnitEntity> enemies, out string why)

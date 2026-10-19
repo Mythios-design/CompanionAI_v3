@@ -17,11 +17,16 @@ using CompanionAI_v3.Settings;
 namespace CompanionAI_v3.Planning.Planners
 {
     /// <summary>
-    /// Bladedancer rules:
-    ///  - Blood Oath only goes on an enemy the Bladedancer can reach this turn (walking, counting the MP that spending
-    ///    wounds gives, or with one Death From Above jump) and can probably kill. The kill is what pays: wounds back,
-    ///    +1 AP and an extra attack (once per round). Once sworn, that enemy is her target until it dies. After the
-    ///    round's reward, extra oaths (once per enemy) go only on hard-to-hit enemies she's about to attack.
+    /// Bladedancer rules, from the game's blueprints:
+    ///  - Blood Oath (a buff on the enemy, no dodge or parry against her) is removed by her next attack roll on that
+    ///    enemy, kill or not; Blade Dance is the exception (its kill pays, a hit that doesn't kill removes the oath
+    ///    when the dance ends). A kill on a sworn enemy pays: heal, and on the round's first such kill +1 AP and an
+    ///    extra weapon attack (the game marks that with a 1-round buff on her). Who is sworn is read from the game's
+    ///    buff, never assumed. The oath only goes on an enemy she can walk to this turn (counting the MP that
+    ///    spending wounds gives) and can kill with her next attack.
+    ///  - Death From Above's landing makes an attack roll on every enemy next to it for a flat Weapon Skill bonus +
+    ///    Agility bonus, so it spends any oath it touches: no landing next to a sworn enemy it won't kill. With a jump
+    ///    needed to get somewhere, she jumps first and swears after landing.
     ///  - Death From Above is a free attack when the landing is next to enough enemies. As a plain gap closer it is
     ///    used on a target in range when a melee attack can still be used on it after landing.
     /// The MP bonus from wound spending (a common Bladedancer talent) is learned in the fight: the first time she
@@ -30,6 +35,8 @@ namespace CompanionAI_v3.Planning.Planners
     public static class BladedancerTactics
     {
         private const string BLOOD_OATH = "590c990c1d684fd09ae883754d28a8ac";
+        private const string BLOOD_OATH_BUFF = "91028e859ede4a698744a9ee148ee778";    // ReaperBloodOath_Buff, on the enemy
+        private const string OATH_REWARD_BUFF = "44f1d979142f4d13b82c9777e2f93d6e";   // ReaperBloodOathCaster_Buff: round's reward taken
 
         // Point-target Death From Above variants (the Ultimate targets an enemy and is a Heroic Act)
         private static readonly HashSet<string> DeathFromAboveGuids = new HashSet<string>
@@ -51,8 +58,10 @@ namespace CompanionAI_v3.Planning.Planners
         private static readonly Dictionary<string, List<string>> _oathTargets = new Dictionary<string, List<string>>();
         // Enemies sworn this round (Blood Oath can be used several times a turn, once per enemy)
         private static readonly Dictionary<string, (int round, HashSet<string> ids)> _swornThisRound = new Dictionary<string, (int, HashSet<string>)>();
-        // Round in which the oath kill reward (+1 AP and an extra attack, once per round) was earned
-        private static readonly Dictionary<string, int> _rewardRound = new Dictionary<string, int>();
+        // Attacks she has made this combat, and the count when each enemy was sworn: an oath with no attack since
+        // is kept even if its buff isn't visible yet
+        private static readonly Dictionary<string, int> _attackCount = new Dictionary<string, int>();
+        private static readonly Dictionary<string, int> _attacksAtOath = new Dictionary<string, int>();
         private static readonly Dictionary<string, string> _lastSworn = new Dictionary<string, string>();
         private static readonly Dictionary<string, float> _woundMPBonus = new Dictionary<string, float>();
         private static readonly Dictionary<string, float> _mpBeforeWoundSpend = new Dictionary<string, float>();
@@ -61,7 +70,8 @@ namespace CompanionAI_v3.Planning.Planners
         {
             _oathTargets.Clear();
             _swornThisRound.Clear();
-            _rewardRound.Clear();
+            _attackCount.Clear();
+            _attacksAtOath.Clear();
             _lastSworn.Clear();
             _woundMPBonus.Clear();
             _mpBeforeWoundSpend.Clear();
@@ -80,8 +90,45 @@ namespace CompanionAI_v3.Planning.Planners
             return entry.ids;
         }
 
-        private static bool RewardClaimedThisRound(string casterId)
-            => _rewardRound.TryGetValue(casterId, out int round) && round == CurrentRound;
+        /// <summary>The game's own mark that her round's oath kill reward (+1 AP, extra attack) has been paid.</summary>
+        public static bool OathRewardTakenThisRound(BaseUnitEntity unit) => HasBuff(unit, OATH_REWARD_BUFF, null);
+
+        /// <summary>The enemy carries her Blood Oath (the game's buff, cast by her).</summary>
+        public static bool HasOathFrom(BaseUnitEntity enemy, BaseUnitEntity caster) => HasBuff(enemy, BLOOD_OATH_BUFF, caster);
+
+        private static bool HasBuff(BaseUnitEntity unit, string guid, BaseUnitEntity caster)
+        {
+            var buffs = unit?.Buffs?.Enumerable;
+            if (buffs == null) return false;
+            foreach (var b in buffs)
+            {
+                if (b?.Blueprint?.AssetGuid?.ToString() != guid) continue;
+                if (caster == null || b.Context?.MaybeCaster == caster) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Death From Above's landing damage on each adjacent enemy: Weapon Skill bonus + Agility bonus.</summary>
+        public static int LandingDamage(BaseUnitEntity unit)
+        {
+            var stats = unit?.Stats;
+            if (stats == null) return 0;
+            return (stats.GetAttributeOptional(Kingmaker.EntitySystem.Stats.Base.StatType.WarhammerWeaponSkill)?.Bonus ?? 0)
+                + (stats.GetAttributeOptional(Kingmaker.EntitySystem.Stats.Base.StatType.WarhammerAgility)?.Bonus ?? 0);
+        }
+
+        /// <summary>
+        /// A sworn enemy whose oath a Death From Above landing at pos would spend: next to the landing and not killed
+        /// by its flat damage. Null when the landing is safe for her oaths.
+        /// </summary>
+        public static BaseUnitEntity LandingSpendsOath(Situation situation, Vector3 pos)
+        {
+            if (situation?.Unit == null) return null;
+            int damage = LandingDamage(situation.Unit);
+            foreach (var sworn in GetOathTargets(situation))
+                if (CombatAPI.GetDistanceInTiles(pos, sworn) <= AdjacentTiles && CombatAPI.GetActualHP(sworn) > damage) return sworn;
+            return null;
+        }
 
         public static bool IsBloodOath(AbilityData ability) => Guid(ability) == BLOOD_OATH;
 
@@ -112,9 +159,16 @@ namespace CompanionAI_v3.Planning.Planners
                 if (ability.Blueprint.GetComponent<AbilityResourceWounds>() != null)
                     _mpBeforeWoundSpend[unit.UniqueId] = CombatAPI.GetCurrentMP(unit);
 
+                if (action.Type == ActionType.Attack || BladedancerPositioning.IsBladeDance(ability))
+                {
+                    _attackCount.TryGetValue(unit.UniqueId, out int n);
+                    _attackCount[unit.UniqueId] = n + 1;
+                }
                 var target = action.Target?.Entity as BaseUnitEntity;
                 if (IsBloodOath(ability) && target != null)
                 {
+                    _attackCount.TryGetValue(unit.UniqueId, out int attacks);
+                    _attacksAtOath[unit.UniqueId + target.UniqueId] = attacks;
                     if (!_oathTargets.TryGetValue(unit.UniqueId, out var list))
                         _oathTargets[unit.UniqueId] = list = new List<string>();
                     if (!list.Contains(target.UniqueId)) list.Add(target.UniqueId);
@@ -190,80 +244,74 @@ namespace CompanionAI_v3.Planning.Planners
         }
 
         /// <summary>
-        /// She can attack the enemy this turn: a tile she can walk to is in melee reach of it, or within jump range of
-        /// a tile next to it (Death From Above with uses left). Uses the real walking paths, not a straight line.
+        /// She can attack the enemy this turn on foot: a tile she can walk to is in melee reach of it. A jump doesn't
+        /// count, since its landing would spend the oath; she jumps first and swears after landing.
+        /// Uses the real walking paths, not a straight line.
         /// </summary>
         private static bool CanGetAt(Situation situation, BaseUnitEntity enemy, List<CustomGridNodeBase> walkTiles)
         {
             float melee = MovementPlanner.GetUnitMeleeRange(situation.Unit) + 0.5f;
-            float jump = 0f;
-            foreach (var attack in situation.AvailableAttacks)
-                if (IsDeathFromAbove(attack) && UsesLeft(attack) > 0)
-                    jump = Math.Max(jump, CombatAPI.GetAbilityRangeInTiles(attack));
             foreach (var node in walkTiles)
-            {
-                float d = CombatAPI.GetDistanceInTiles(node.Vector3Position, enemy);
-                if (d <= melee || (jump > 0f && d <= jump + AdjacentTiles)) return true;
-            }
+                if (CombatAPI.GetDistanceInTiles(node.Vector3Position, enemy) <= melee) return true;
             return false;
         }
 
-        /// <summary>How far she can get to attack this turn: melee reach + MP (and the wound MP bonus) + a jump.</summary>
+        /// <summary>How far she can walk to attack this turn: melee reach + MP (and the wound MP bonus).</summary>
         private static float OathReach(Situation situation, out string text)
         {
             var unit = situation.Unit;
             float bonusMP = WoundMPBonus(unit);
             float walk = situation.CurrentMP + bonusMP;
-            float melee = MovementPlanner.GetUnitMeleeRange(unit);
-            float jump = 0f;
-            if (situation.AvailableAttacks != null)
-                foreach (var attack in situation.AvailableAttacks)
-                    if (IsDeathFromAbove(attack) && UsesLeft(attack) > 0)
-                        jump = Math.Max(jump, CombatAPI.GetAbilityRangeInTiles(attack));
-            float reach = melee + walk + jump;
-            text = $"reach {reach:F0} tiles (MP {situation.CurrentMP:F0}{(bonusMP > 0 ? $" +{bonusMP:F0} from wounds" : "")}{(jump > 0 ? $", jump {jump:F0}" : "")})";
+            float reach = MovementPlanner.GetUnitMeleeRange(unit) + walk;
+            text = $"walking reach {reach:F0} tiles (MP {situation.CurrentMP:F0}{(bonusMP > 0 ? $" +{bonusMP:F0} from wounds" : "")})";
             return reach;
         }
 
         /// <summary>
-        /// Living enemies she has sworn on, in the order sworn. Sworn enemies who are gone are dropped; one going down
-        /// during her own turn after she attacked counts as the round's kill reward.
+        /// Living enemies carrying her Blood Oath (the game's buff), in the order sworn. An oath sworn with no attack of
+        /// hers since counts even before its buff shows. Oaths that are gone are dropped and logged: spent by a hit
+        /// that didn't kill, or the enemy died (with the round's reward if the game marked it on her).
         /// </summary>
         public static List<BaseUnitEntity> GetOathTargets(Situation situation)
         {
             var result = new List<BaseUnitEntity>();
             var unit = situation?.Unit;
-            if (unit == null || !_oathTargets.TryGetValue(unit.UniqueId, out var ids) || ids.Count == 0) return result;
+            if (unit == null || situation.Enemies == null) return result;
+            if (!_oathTargets.TryGetValue(unit.UniqueId, out var ids))
+                _oathTargets[unit.UniqueId] = ids = new List<string>();
+            _attackCount.TryGetValue(unit.UniqueId, out int attacks);
 
             for (int i = ids.Count - 1; i >= 0; i--)
             {
-                BaseUnitEntity found = null;
-                foreach (var enemy in situation.Enemies)
-                {
-                    if (enemy != null && enemy.UniqueId == ids[i] && enemy.IsConscious && !enemy.LifeState.IsDead) { found = enemy; break; }
-                }
-                if (found != null) continue;
+                BaseUnitEntity enemy = null;
+                foreach (var e in situation.Enemies)
+                    if (e != null && e.UniqueId == ids[i]) { enemy = e; break; }
+                bool alive = enemy != null && enemy.IsConscious && !enemy.LifeState.IsDead;
+                if (alive && HasOathFrom(enemy, unit)) continue;
+                string key = unit.UniqueId + ids[i];
+                if (alive && _attacksAtOath.TryGetValue(key, out int atOath) && atOath == attacks) continue;  // buff not visible yet
 
+                if (alive)
+                    Log.Planning.Info($"[Bladedancer] {unit.CharacterName}: Blood Oath on {enemy.CharacterName} spent by a hit that didn't kill");
+                else
+                    Log.Planning.Info($"[Bladedancer] {unit.CharacterName}: sworn enemy down" +
+                        (OathRewardTakenThisRound(unit) ? ", round's oath reward taken" : ""));
+                _attacksAtOath.Remove(key);
                 ids.RemoveAt(i);
-                // Only an approximation of who killed it: the game gives the reward to her killing blow
-                var turnState = TurnOrchestrator.Instance?.GetCurrentTurnState();
-                if (turnState?.Unit == unit && turnState.HasAttackedThisTurn && !RewardClaimedThisRound(unit.UniqueId))
-                {
-                    _rewardRound[unit.UniqueId] = CurrentRound;
-                    Log.Planning.Info($"[Bladedancer] {unit.CharacterName}: oath target down this turn, kill reward taken for the round");
-                }
             }
+            // Oaths the game shows that weren't recorded (e.g. sworn by the player before the AI took over)
+            foreach (var e in situation.Enemies)
+                if (e != null && e.IsConscious && !e.LifeState.IsDead && !ids.Contains(e.UniqueId) && HasOathFrom(e, unit))
+                    ids.Insert(0, e.UniqueId);
             foreach (var id in ids)
-            {
                 foreach (var enemy in situation.Enemies)
                     if (enemy != null && enemy.UniqueId == id) { result.Add(enemy); break; }
-            }
             return result;
         }
 
         /// <summary>Already sworn on this round, or still carrying her oath: Blood Oath goes on each enemy once.</summary>
-        private static bool IsAlreadySworn(Situation situation, AbilityData oath, BaseUnitEntity enemy)
-            => SwornThisRound(situation.Unit.UniqueId).Contains(enemy.UniqueId) || AllyStateCache.HasBuff(enemy, oath);
+        private static bool IsAlreadySworn(Situation situation, BaseUnitEntity enemy)
+            => SwornThisRound(situation.Unit.UniqueId).Contains(enemy.UniqueId) || HasOathFrom(enemy, situation.Unit);
 
         #endregion
 
@@ -372,7 +420,7 @@ namespace CompanionAI_v3.Planning.Planners
             {
                 if (enemy == null || !enemy.IsConscious || enemy.LifeState.IsDead) continue;
                 if (CombatAPI.IsTargetImmuneToDamage(enemy, unit)) continue;
-                if (IsAlreadySworn(situation, oath, enemy)) continue;
+                if (IsAlreadySworn(situation, enemy)) continue;
                 if (engaged) { if (!situation.HittableEnemies.Contains(enemy)) continue; }
                 else
                 {
@@ -417,7 +465,6 @@ namespace CompanionAI_v3.Planning.Planners
             float range = CombatAPI.GetAbilityRangeInTiles(jump);
             if (casterNode == null || range < 1f) return null;
 
-            var oathTarget = GetOathTarget(situation);
             bool hasSelfAoE = situation.HasSelfAoE;
             bool avoidHazards = !situation.NeedsAoEEvacuation;
             var candidates = new List<(Vector3 pos, int enemies, float score)>();
@@ -435,8 +482,8 @@ namespace CompanionAI_v3.Planning.Planners
 
                 int enemies = CountAdjacent(pos, situation.Enemies, unit, enemiesOnly: true);
                 if (enemies < StrikeMinEnemies) continue;
-                // With an oath sworn, only jump to tiles next to that enemy
-                if (oathTarget != null && CombatAPI.GetDistanceInTiles(pos, oathTarget) > AdjacentTiles) continue;
+                // The landing's attack roll would spend an oath it doesn't kill
+                if (LandingSpendsOath(situation, pos) != null) continue;
 
                 float score = enemies * 10f;
                 if (hasSelfAoE) score -= CountAdjacent(pos, situation.Allies, unit, enemiesOnly: false) * 15f;
@@ -502,6 +549,14 @@ namespace CompanionAI_v3.Planning.Planners
         {
             if (!IsDeathFromAbove(ability)) return true;
 
+            // Landing next to a sworn enemy makes an attack roll on it: the oath is spent unless the landing kills it
+            if (target != null && HasOathFrom(target, situation.Unit) && CombatAPI.GetActualHP(target) > LandingDamage(situation.Unit))
+            {
+                Log.Planning.Info($"[{roleName}] Death From Above kept back -> {target.CharacterName}: the landing would spend the Blood Oath " +
+                    $"(landing {LandingDamage(situation.Unit)} damage, {CombatAPI.GetActualHP(target):F0} HP)");
+                return false;
+            }
+
             // Walk first: a target within walking reach is reached on foot, keeping the charge. The jump stays allowed
             // when an enemy is already next to her, since walking away would provoke attacks of opportunity.
             if (target != null && !CombatAPI.IsInThreateningArea(situation.Unit))
@@ -546,14 +601,44 @@ namespace CompanionAI_v3.Planning.Planners
             return best;
         }
 
-        /// <summary>Landing tile bonus for Death From Above: more enemies hit on landing, next to the oath target, away from allies.</summary>
+        /// <summary>
+        /// A sworn enemy next to her that a single-target melee attack (not Blade Dance, a jump or a gap closer) can hit
+        /// now within the AP left, or null. That attack goes before Blade Dance.
+        /// </summary>
+        public static BaseUnitEntity SwornEnemyToAttackFirst(Situation situation, AbilityData bladeDance, float remainingAP, out string attackName)
+        {
+            attackName = null;
+            var unit = situation?.Unit;
+            if (unit == null || situation.AvailableAttacks == null) return null;
+            foreach (var sworn in GetOathTargets(situation))
+            {
+                if (CombatAPI.GetDistanceInTiles(unit, sworn) > AdjacentTiles) continue;
+                foreach (var a in situation.AvailableAttacks)
+                {
+                    if (a == null || a == bladeDance || a.Weapon == null || !a.IsMelee) continue;
+                    if (BladedancerPositioning.IsBladeDance(a) || IsDeathFromAbove(a) || AbilityDatabase.IsGapCloser(a)) continue;
+                    if (CombatAPI.GetEffectiveAPCost(a) > remainingAP + 0.01f) continue;
+                    if (!CombatAPI.CanUseAbilityOn(a, new TargetWrapper(sworn), out _)) continue;
+                    attackName = a.Name;
+                    return sworn;
+                }
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// Landing tile bonus for Death From Above: more enemies hit on landing, a sworn enemy the landing kills (that
+        /// pays the oath), and away from allies when Blade Dance will follow (the landing itself never hits allies).
+        /// </summary>
         public static float LandingBonus(AbilityData ability, Vector3 pos, Situation situation)
         {
             if (situation == null || !IsDeathFromAbove(ability)) return 0f;
-            float bonus = CountAdjacent(pos, situation.Enemies, situation.Unit, enemiesOnly: true) * 50f
-                - CountAdjacent(pos, situation.Allies, situation.Unit, enemiesOnly: false) * BladedancerPositioning.AllyPenalty;
-            var oathTarget = GetOathTarget(situation);
-            if (oathTarget != null && CombatAPI.GetDistanceInTiles(pos, oathTarget) <= AdjacentTiles) bonus += 30f;
+            float bonus = CountAdjacent(pos, situation.Enemies, situation.Unit, enemiesOnly: true) * 50f;
+            if (situation.HasSelfAoE)
+                bonus -= CountAdjacent(pos, situation.Allies, situation.Unit, enemiesOnly: false) * BladedancerPositioning.AllyPenalty;
+            int damage = LandingDamage(situation.Unit);
+            foreach (var sworn in GetOathTargets(situation))
+                if (CombatAPI.GetDistanceInTiles(pos, sworn) <= AdjacentTiles && CombatAPI.GetActualHP(sworn) <= damage) bonus += 30f;
             return bonus;
         }
 

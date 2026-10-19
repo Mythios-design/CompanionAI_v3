@@ -1755,6 +1755,13 @@ namespace CompanionAI_v3.Planning.Planners
                 return null;
             }
 
+            if (BladedancerPositioning.IsBladeDance(attack)
+                && !BladedancerPositioning.BladeDanceWorthIt(situation, attack, adjacentEnemies, aoeConfig.SelfAoeMinAdjacentEnemies, remainingAP, out string danceWhy))
+            {
+                Log.Planning.Info($"[{roleName}] {attack.Name} held: {danceWhy}");
+                return null;
+            }
+
             // 자신에게 사용 가능한지 확인
             var selfTarget = new TargetWrapper(caster);
             string reason;

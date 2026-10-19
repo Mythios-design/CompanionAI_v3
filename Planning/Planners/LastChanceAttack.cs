@@ -70,7 +70,8 @@ namespace CompanionAI_v3.Planning.Planners
             {
                 if (BladedancerPositioning.IsBladeDance(a))
                 {
-                    if (BladeDanceUseful(unit, situation, enemies, out int around) && around * 10f > bestDamage)
+                    if (BladeDanceUseful(unit, situation, enemies, out int around) && around * 10f > bestDamage
+                        && BladedancerPositioning.BladeDanceWorthIt(situation, a, around, 1, ap, out _))
                     { bestAbility = a; bestTarget = unit; bestDamage = around * 10f; }
                     continue;
                 }

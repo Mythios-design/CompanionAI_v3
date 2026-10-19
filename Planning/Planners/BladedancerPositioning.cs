@@ -222,6 +222,7 @@ namespace CompanionAI_v3.Planning.Planners
                 if (avoidHazard && CombatAPI.IsPositionInHazardZone(pos, unit)) continue;
                 Count(unit, pos, situation.Enemies, situation.Allies, out int e, out int a);
                 if (a > 0) continue;
+                if (BladedancerTactics.LandingSpendsOath(situation, pos) != null) continue;  // the landing's attack roll would spend it
                 float score = e * EnemyBonus;
                 if (score < bestScore) continue;
                 if (!jump.CanTargetFromNode(casterNode, node, new Kingmaker.Utility.TargetWrapper(pos),
@@ -273,6 +274,45 @@ namespace CompanionAI_v3.Planning.Planners
                 bestPath = cell.Length;
             }
             return bestScore > float.MinValue;
+        }
+
+        /// <summary>
+        /// Final check before Blade Dance from where she stands. Its attacks pick random targets among every creature
+        /// next to her and every breakable object that isn't cover (AbilityCustomBladeDance), so objects take a share of
+        /// the attacks: the enemy count is scaled by enemies / (enemies + objects) before the minimum. A sworn enemy
+        /// next to her gets her single-target attack first: a dance hit that doesn't kill removes the oath.
+        /// </summary>
+        public static bool BladeDanceWorthIt(Situation situation, AbilityData bladeDance, int adjacentEnemies, int minEnemies,
+            float remainingAP, out string why)
+        {
+            why = null;
+            var unit = situation?.Unit;
+            if (unit == null) return false;
+            int objects = CountBreakableObjects(unit);
+            float effective = objects > 0 ? adjacentEnemies * (float)adjacentEnemies / (adjacentEnemies + objects) : adjacentEnemies;
+            if (effective < minEnemies - 0.01f)
+            {
+                why = $"{objects} breakable objects next to her would take attacks ({adjacentEnemies} enemies, worth {effective:F1})";
+                return false;
+            }
+            var sworn = BladedancerTactics.SwornEnemyToAttackFirst(situation, bladeDance, remainingAP, out string attackName);
+            if (sworn != null)
+            {
+                why = $"{attackName} on sworn {sworn.CharacterName} first (a dance hit that doesn't kill removes the oath)";
+                return false;
+            }
+            return true;
+        }
+
+        /// <summary>Breakable objects (not cover) Blade Dance can pick as targets from where she stands.</summary>
+        private static int CountBreakableObjects(BaseUnitEntity unit)
+        {
+            var pool = Kingmaker.Game.Instance?.State?.DestructibleEntities;
+            if (pool == null) return 0;
+            int n = 0;
+            foreach (var d in pool)
+                if (d != null && Kingmaker.UnitLogic.Abilities.Components.AbilityCustomBladeDance.CheckDestructibleTargetable(unit, d)) n++;
+            return n;
         }
 
         private static AbilityData FindBladeDance(Situation situation)

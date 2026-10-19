@@ -420,7 +420,8 @@ namespace CompanionAI_v3.Planning.Planners
                     float gcRange = CombatAPI.GetAbilityRangeInTiles(gapCloser);
                     float maxReachWithWalk = gcRange + remainingMP + 1;  // +1 for adjacency
 
-                    // A Bladedancer with a living oath target jumps only at it: her next attack has to land there
+                    // A Bladedancer with a living oath target jumps only at it, and only when the landing kills it
+                    // (AllowJumpAsGapCloser): otherwise she walks, so the landing does not spend the oath
                     var oathTarget = BladedancerTactics.GetOathTarget(situation);
 
                     foreach (var candidateTarget in situation.Enemies)
@@ -802,7 +803,10 @@ namespace CompanionAI_v3.Planning.Planners
 
                     // ★ v3.18.24: 스코어 기반 선택 — Self-AoE 아군 근접 페널티
                     float candidateScore = -distFromCaster; // 기본: 가까울수록 높은 점수 (거리 차이 ~0-2)
-                    // Death From Above damages every enemy next to the landing: prefer tiles next to more of them
+                    // Death From Above damages every enemy next to the landing: prefer tiles next to more of them,
+                    // and never land next to a sworn enemy the landing won't kill (its attack roll spends the oath)
+                    if (BladedancerTactics.IsDeathFromAbove(gapCloserAbility) && BladedancerTactics.LandingSpendsOath(situation, nodePos) != null)
+                        continue;
                     candidateScore += BladedancerTactics.LandingBonus(gapCloserAbility, nodePos, situation);
 
                     if (hasSelfAoE && situation.Allies != null)
