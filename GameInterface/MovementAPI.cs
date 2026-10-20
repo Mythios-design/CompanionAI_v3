@@ -94,37 +94,10 @@ namespace CompanionAI_v3.GameInterface
 
         #endregion
 
-        #region ★ v3.9.42: Approach Path Cache (다중 턴 접근 방향 일관성)
+        #region Approach state
 
-        /// <summary>
-        /// 유닛별 A* 접근 경로 캐시
-        /// 문제: 좁은 통로에서 매 턴 A* 재계산 → 다른 경로 선택 → 왔다갔다 진동
-        /// 해결: 접근 경로를 캐시하여 같은 적에게 계속 접근할 때 동일 경로 유지
-        /// </summary>
-        private struct CachedApproachPath
-        {
-            public string TargetId;          // 접근 대상 적 UniqueId
-            public Vector3 TargetPosition;   // 경로 계산 시 적 위치
-            public List<GraphNode> Path;     // 전체 A* 경로 노드
-        }
-
-        private static readonly Dictionary<string, CachedApproachPath> _approachPathCache = new();
-
-        /// <summary>접근 경로 캐시 전체 클리어 (전투 종료 시)</summary>
-        public static void ClearApproachPathCache()
-        {
-            _approachPathCache.Clear();
-            if (Main.IsDebugEnabled) Log.Engine.Debug("[MovementAPI] Approach path cache cleared");
-        }
-
-        /// <summary>특정 유닛의 접근 경로 캐시 클리어</summary>
-        public static void ClearApproachPathCache(string unitId)
-        {
-            _approachPathCache.Remove(unitId);
-        }
-
-        /// <summary>적 위치가 크게 변했는지 확인 (3타일 이상 이동 시 경로 재계산)</summary>
-        private const float APPROACH_CACHE_INVALIDATION_DIST = 3f * 1.35f; // 3 tiles in meters
+        /// <summary>Clears the walking approach's per-combat state (the enemy each unit walks toward, the walking map).</summary>
+        public static void ClearApproachPathCache() => WalkingApproach.Reset();
 
         #endregion
 

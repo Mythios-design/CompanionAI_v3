@@ -42,6 +42,8 @@ From highest to lowest:
 4. **Other buffs, debuffs, heals and orders.**
 5. **Leftover spends.** Only AP left after everything else, like the Blood Phial throw.
 
+**Approach by walking distance:** when no tile this turn can attack, a unit walks toward the nearest place it can attack from, measured by real walking distance (one walking map per turn, about four turns of movement deep, from the game's own pathfinding). It keeps last turn's enemy, else the planner's target, if that is within one turn's walk of the nearest; otherwise the nearest by walking. Its step this turn is the furthest safe tile on that walk. If no enemy is reachable on foot (across a pit, on a platform), it doesn't approach at all: no straight-line or dead-end walks (`WalkingApproach.cs`).
+
 **Last-chance attack:** before any turn ends with AP left, one more look for an attack the game still allows (weapon attacks with free uses left, psychic powers, Blade Dance), from where the unit stands or after a walk that draws no attacks of opportunity, with the usual friendly-fire rules. Grenades, markers, Blood Phial, Raining Blood, Tactical Knowledge, Heroic Acts and Desperate Measures are left to their own rules. When AP stays unspent, the log says why (`LastChanceAttack.cs`).
 
 A setup is only worth AP if the thing it sets up actually happens this turn.

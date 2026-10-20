@@ -1141,16 +1141,10 @@ namespace CompanionAI_v3.Planning.Planners
                         return PlannedAction.Move(approachPosition.Position, $"Approach {target.CharacterName}");
                     }
 
-                    // ★ v3.18.16: 최후 폴백에서도 DamagingAoE 체크
-                    if (!situation.NeedsAoEEvacuation && CombatAPI.IsPositionInHazardZone(target.Position, unit))
-                    {
-                        if (Main.IsDebugEnabled) Log.Planning.Debug($"[{roleName}] PlanMoveToEnemy: Target position in damaging AoE — staying put");
-                        return null;
-                    }
-
-                    // 최후 폴백: 적 위치 직접 사용 (FindBestApproachPosition도 실패한 경우)
-                    if (Main.IsDebugEnabled) Log.Planning.Debug($"[{roleName}] PlanMoveToEnemy: No approach position found, falling back to target position");
-                    return PlannedAction.Move(target.Position, $"Approach {target.CharacterName}");
+                    // No walking approach: either as close as this turn allows or no enemy reachable on foot. Moving
+                    // to the enemy's own position would follow the pathfinder's partial route to a dead end.
+                    Log.Planning.Info($"[{roleName}] PlanMoveToEnemy: no walking approach toward {target.CharacterName} - not moving");
+                    return null;
                 }
 
                 // 현재 위치와 거의 같으면 이동 불필요
@@ -1799,7 +1793,8 @@ namespace CompanionAI_v3.Planning.Planners
             if (best == null || best.Node == null) return null;
 
             float newDist = CombatAPI.GetDistanceInTiles(best.Position, target);
-            if (newDist >= targetDist - 0.5f)
+            // A walking approach step is judged by walking distance (it may bend away around a pit), not straight lines
+            if (how == "into melee reach" && newDist >= targetDist - 0.5f)
             {
                 Log.Planning.Info($"[MovementPlanner] {unit.CharacterName}: End-of-turn advance skipped (best tile {newDist:F1}t vs now {targetDist:F1}t from {target.CharacterName})");
                 return null;

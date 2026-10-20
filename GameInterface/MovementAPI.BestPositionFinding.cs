@@ -1213,8 +1213,9 @@ namespace CompanionAI_v3.GameInterface
         }
 
         /// <summary>
-        /// ★ v3.7.23: 적 방향으로 도달 가능한 최대 위치 찾기 (접근 폴백용)
-        /// 공격 가능한 위치가 없을 때 최대한 적에게 가까이 이동
+        /// Approach when no attack is possible yet: a reachable tile that can attack the target this turn, else this
+        /// turn's step toward the nearest place (by walking) the unit can attack from (WalkingApproach). Null when it is
+        /// as close as this turn allows or no enemy is reachable on foot: then it doesn't move to approach.
         /// </summary>
         public static PositionScore FindBestApproachPosition(
             BaseUnitEntity unit,
@@ -1234,312 +1235,47 @@ namespace CompanionAI_v3.GameInterface
             }
 
             var targetPos = target.Position;
-
-            // ★ v3.18.16: 현재 안전한데 DamagingAoE 안으로 접근하는 것 방지
-            // 게임 PathAiCell.StepsInsideDamagingAoE가 감지 못하는 AoE도 CombatAPI로 체크
             bool avoidHazardZones = !CombatAPI.IsUnitInHazardZone(unit);
-
-            // ★ v3.110.13: 타겟 공격 가능성 체크용 — 단일 타겟 리스트 재사용 (GC 절감)
             var singleTargetList = new List<BaseUnitEntity>(1) { target };
 
-            // ★ v3.9.38: A* 경로 기반 접근 위치 선택
-            // 유클리드 거리가 아닌 실제 A* 경로를 따라 가장 먼 도달 가능 지점 선택
-            // 벽/장애물을 올바르게 돌아가는 다중 턴 이동이 가능
-            var pathResult = FindApproachAlongPath(unit, targetPos, tiles);
-            if (pathResult != null)
-            {
-                // ★ v3.18.16: A* 접근 목적지가 DamagingAoE 안이면 거부
-                if (avoidHazardZones && CombatAPI.IsPositionInHazardZone(pathResult.Position, unit))
-                {
-                    Log.Engine.Info($"[MovementAPI] {unit.CharacterName}: A* approach REJECTED — destination in damaging AoE ({pathResult.Position.x:F1},{pathResult.Position.z:F1})");
-                    pathResult = null;
-                }
-                else
-                {
-                    // ★ v3.110.13: A* 결과 hittable 검증 — 공격 가능하면 즉시 채택.
-                    // hittable=0이면 Euclidean 폴백의 hittable-first 탐색에 기회 부여.
-                    int pathHittable = pathResult.Node != null
-                        ? CombatAPI.CountHittableEnemiesFromPosition(unit, pathResult.Node, singleTargetList, null, null)
-                        : 0;
-                    if (pathHittable > 0)
-                    {
-                        pathResult.HittableEnemyCount = pathHittable;
-                        pathResult.HasLosToEnemy = true;
-                        Log.Engine.Info($"[MovementAPI] {unit.CharacterName}: A* approach to ({pathResult.Position.x:F1},{pathResult.Position.z:F1}) dist={Vector3.Distance(pathResult.Position, targetPos):F1}m, pathRisk={pathResult.PathRiskScore:F1}, hittable={pathHittable} to {target.CharacterName}");
-                        return pathResult;
-                    }
-                    if (Main.IsDebugEnabled) Log.Engine.Debug($"[MovementAPI] {unit.CharacterName}: A* approach hittable=0 ({pathResult.Position.x:F1},{pathResult.Position.z:F1}), trying Euclidean hittable-first");
-                }
-            }
-            else
-            {
-                if (Main.IsDebugEnabled) Log.Engine.Debug($"[MovementAPI] {unit.CharacterName}: A* path failed, falling back to Euclidean approach");
-            }
-
-            // ★ v3.110.13: 2-tier 선택 — hittable > 0 우선, 없으면 기존 거리 최소 폴백.
-            // 이전(~v3.110.12): 거리+경로위험만 평가. 반환 위치가 hittable=0이어도 승인 →
-            // v3.110.12의 "staying put → approach 우회" 수정이 또 다른 hittable=0 위치로 수렴하는
-            // 증상의 근본 원인. 접근의 목표는 "공격 가능해지는 위치"여야 함.
+            // A tile reachable this turn that can attack the target: the closest one, lowest path risk on ties
             PositionScore hittableCandidate = null;
             float hittableClosestDist = float.MaxValue;
             float hittableLowestRisk = float.MaxValue;
             int hittableBestCount = 0;
-
-            PositionScore closestCandidate = null;
-            float closestDist = float.MaxValue;
-            float lowestPathRisk = float.MaxValue;
-
             foreach (var kvp in tiles)
             {
                 var aiCell = kvp.Value;
                 var node = aiCell.Node as CustomGridNodeBase;
                 if (node == null || !aiCell.IsCanStand) continue;
-
                 var pos = node.Vector3Position;
-
-                // ★ v3.18.16: DamagingAoE 타일 필터링 (현재 안전한 경우만)
                 if (avoidHazardZones && CombatAPI.IsPositionInHazardZone(pos, unit)) continue;
 
-                float distToTarget = Vector3.Distance(pos, targetPos);
-
-                float pathRisk = aiCell.ProvokedAttacks * WEIGHT_AOO + aiCell.EnteredAoE * WEIGHT_AOE_ENTRY + aiCell.StepsInsideDamagingAoE * WEIGHT_DAMAGING_AOE_STEP;
-
-                // ★ v3.110.13: hittable 분류 — 이 위치에서 target 공격 가능 여부
                 int hittable = CombatAPI.CountHittableEnemiesFromPosition(unit, node, singleTargetList, null, null);
-
-                if (hittable > 0)
-                {
-                    // hittable 후보: 최단 거리 + 최저 위험 우선
-                    if (distToTarget < hittableClosestDist || (distToTarget == hittableClosestDist && pathRisk < hittableLowestRisk))
-                    {
-                        hittableClosestDist = distToTarget;
-                        hittableLowestRisk = pathRisk;
-                        hittableBestCount = hittable;
-                        hittableCandidate = new PositionScore
-                        {
-                            Node = node,
-                            CanStand = true,
-                            DistanceScore = 100f - distToTarget,
-                            PathRiskScore = pathRisk,
-                            HittableEnemyCount = hittable,
-                            HasLosToEnemy = true
-                        };
-                    }
-                }
-                else
-                {
-                    // 일반 후보: 기존 로직 (hittable 없을 때 폴백)
-                    if (distToTarget < closestDist || (distToTarget == closestDist && pathRisk < lowestPathRisk))
-                    {
-                        closestDist = distToTarget;
-                        lowestPathRisk = pathRisk;
-                        closestCandidate = new PositionScore
-                        {
-                            Node = node,
-                            CanStand = true,
-                            DistanceScore = 100f - distToTarget,
-                            PathRiskScore = pathRisk,
-                        };
-                    }
-                }
-            }
-
-            // hittable 후보 우선 선택
-            if (hittableCandidate != null)
-            {
-                Log.Engine.Info($"[MovementAPI] {unit.CharacterName}: Euclidean approach (hittable) to ({hittableCandidate.Position.x:F1},{hittableCandidate.Position.z:F1}) dist={hittableClosestDist:F1}m, pathRisk={hittableLowestRisk:F1}, hittable={hittableBestCount} to {target.CharacterName}");
-                return hittableCandidate;
-            }
-
-            // No tile this turn can hit: for ranged characters, follow the path toward the nearest tile (within two
-            // turns) that can see an enemy, instead of the straight-line closest tile, which often ends at a wall
-            var sightStep = LineOfSightApproach.FindStepTowardSight(unit, tiles,
-                predictedMP > 0 ? predictedMP : CombatAPI.GetCurrentMP(unit));
-            if (sightStep != null) return sightStep;
-
-            // The route step: the straight-line closest tile can be a dead end across a pit or a wall, so it is
-            // only used when the pathfinder found no route
-            if (pathResult != null)
-            {
-                Log.Engine.Info($"[MovementAPI] {unit.CharacterName}: approach along the route to ({pathResult.Position.x:F1},{pathResult.Position.z:F1}), " +
-                    $"pathRisk={pathResult.PathRiskScore:F1}, can't attack {target.CharacterName} from there this turn");
-                return pathResult;
-            }
-
-            if (closestCandidate != null)
-            {
-                Log.Engine.Info($"[MovementAPI] {unit.CharacterName}: Euclidean approach (closest, hittable=0) to ({closestCandidate.Position.x:F1},{closestCandidate.Position.z:F1}) dist={closestDist:F1}m, pathRisk={lowestPathRisk:F1} to {target.CharacterName}");
-            }
-
-            return closestCandidate;
-        }
-
-        /// <summary>
-        /// The furthest tile reachable this turn along the pathfinder's route to the target. The route is the
-        /// shortest way there, so every later step is progress even when it bends away from the target in a straight
-        /// line (around a pit or a wall); straight-line distance is never used to judge it.
-        /// The route is cached per unit so a multi-turn approach keeps the same way round (no oscillation).
-        /// </summary>
-        private static PositionScore FindApproachAlongPath(
-            BaseUnitEntity unit,
-            Vector3 targetPos,
-            Dictionary<GraphNode, WarhammerPathAiCell> reachableTiles)
-        {
-            try
-            {
-                var agent = unit.View?.MovementAgent;
-                if (agent == null) return null;
-
-                string unitId = unit.UniqueId;
-                float currentDistToTarget = Vector3.Distance(unit.Position, targetPos);
-
-                // ── Step 1: 캐시된 경로로 Phase 1 시도 ──
-                if (_approachPathCache.TryGetValue(unitId, out var cached))
-                {
-                    float targetMoved = Vector3.Distance(cached.TargetPosition, targetPos);
-                    if (targetMoved < APPROACH_CACHE_INVALIDATION_DIST && cached.Path != null && cached.Path.Count >= 2)
-                    {
-                        int foundIdx = FindNearestNodeOnPath(unit.Position, cached.Path);
-                        if (foundIdx >= 0 && foundIdx < cached.Path.Count - 1)
-                        {
-                            if (Main.IsDebugEnabled) Log.Engine.Debug($"[MovementAPI] {unit.CharacterName}: Using cached approach path ({cached.Path.Count} nodes, current at step {foundIdx})");
-
-                            // ★ v3.9.60: currentIdx 이후만 탐색 (현재 위치 선택 방지)
-                            int cachedMinIdx = Math.Max(foundIdx + 1, 1);
-                            var cachedResult = SearchApproachPhase1(unit, cached.Path, cachedMinIdx,
-                                reachableTiles, targetPos, currentDistToTarget);
-                            if (cachedResult != null) return cachedResult;
-                        }
-                    }
-
-                    // 캐시 경로 Phase 1 실패 → 캐시 무효화 (오래되었거나 방향 불일치)
-                    _approachPathCache.Remove(unitId);
-                    if (Main.IsDebugEnabled) Log.Engine.Debug($"[MovementAPI] {unit.CharacterName}: Cached path stale — invalidating, computing fresh path");
-                }
-
-                // ── Step 2: 신선한 A* 경로 계산 ──
-                // ignoreThreateningAreaCost=true → 근접 위협/AoE 비용 무시 (순수 최단 경로)
-                var fullPath = PathfindingService.Instance.FindPathTB_Blocking(
-                    agent, targetPos, limitRangeByActionPoints: false,
-                    ignoreThreateningAreaCost: true);
-
-                if (fullPath == null || fullPath.error || fullPath.path == null || fullPath.path.Count < 2)
-                {
-                    if (Main.IsDebugEnabled) Log.Engine.Debug($"[MovementAPI] {unit.CharacterName}: A* path to target failed or too short");
-                    return null;
-                }
-
-                var pathNodes = fullPath.path;
-
-                // 신선한 경로 캐시 저장 (5노드 이상의 장거리 경로만)
-                if (pathNodes.Count >= 5)
-                {
-                    _approachPathCache[unitId] = new CachedApproachPath
-                    {
-                        TargetId = null,
-                        TargetPosition = targetPos,
-                        Path = new List<GraphNode>(pathNodes)
-                    };
-                }
-
-                if (Main.IsDebugEnabled) Log.Engine.Debug($"[MovementAPI] {unit.CharacterName}: Fresh A* path has {pathNodes.Count} nodes, currentDist={currentDistToTarget:F1}");
-
-                // ── Step 3: furthest reachable step along the fresh route ──
-                var freshResult = SearchApproachPhase1(unit, pathNodes, 1, reachableTiles, targetPos, currentDistToTarget);
-                if (freshResult != null) return freshResult;
-
-                if (Main.IsDebugEnabled) Log.Engine.Debug($"[MovementAPI] {unit.CharacterName}: no reachable tile further along the route ({reachableTiles.Count} reachable tiles)");
-                return null;
-            }
-            catch (Exception ex)
-            {
-                Log.Engine.Error(ex, $"[MovementAPI] FindApproachAlongPath error");
-                return null;
-            }
-        }
-
-        /// <summary>
-        /// The furthest reachable standable tile on the route from minIdx on, searching back from the target end.
-        /// The tile she stands on (within 1.5m) is skipped.
-        /// </summary>
-        private static PositionScore SearchApproachPhase1(
-            BaseUnitEntity unit,
-            List<GraphNode> pathNodes,
-            int minIdx,
-            Dictionary<GraphNode, WarhammerPathAiCell> reachableTiles,
-            Vector3 targetPos,
-            float currentDistToTarget)
-        {
-            for (int i = pathNodes.Count - 1; i >= minIdx; i--)
-            {
-                var pathNode = pathNodes[i];
-                if (!reachableTiles.TryGetValue(pathNode, out var aiCell)) continue;
-
-                var node = aiCell.Node as CustomGridNodeBase;
-                if (node == null || !aiCell.IsCanStand) continue;
-
-                float distToTarget = Vector3.Distance(node.Vector3Position, targetPos);
-
-                // 현재 위치와 동일한 노드 제외 (부동소수점 오차 방지)
-                if (Vector3.Distance(node.Vector3Position, unit.Position) < 1.5f)
-                {
-                    if (Main.IsDebugEnabled) Log.Engine.Debug($"[MovementAPI] {unit.CharacterName}: A* step {i} skipped — same as current position");
-                    continue;
-                }
-
-                float pathRisk = aiCell.ProvokedAttacks * WEIGHT_AOO
-                    + aiCell.EnteredAoE * WEIGHT_AOE_ENTRY
-                    + aiCell.StepsInsideDamagingAoE * WEIGHT_DAMAGING_AOE_STEP;
-
-                Log.Engine.Info($"[MovementAPI] {unit.CharacterName}: following the route: step {i} of {pathNodes.Count - 1}, " +
-                    $"{RouteLengthFrom(pathNodes, i):F1}m left along the route ({distToTarget:F1}m straight line, was {currentDistToTarget:F1}m), pathRisk={pathRisk:F1}");
-
-                return new PositionScore
+                if (hittable <= 0) continue;
+                float distToTarget = Vector3.Distance(pos, targetPos);
+                float pathRisk = aiCell.ProvokedAttacks * WEIGHT_AOO + aiCell.EnteredAoE * WEIGHT_AOE_ENTRY + aiCell.StepsInsideDamagingAoE * WEIGHT_DAMAGING_AOE_STEP;
+                if (distToTarget > hittableClosestDist || (distToTarget == hittableClosestDist && pathRisk >= hittableLowestRisk)) continue;
+                hittableClosestDist = distToTarget;
+                hittableLowestRisk = pathRisk;
+                hittableBestCount = hittable;
+                hittableCandidate = new PositionScore
                 {
                     Node = node,
                     CanStand = true,
                     DistanceScore = 100f - distToTarget,
-                    PathRiskScore = pathRisk
+                    PathRiskScore = pathRisk,
+                    HittableEnemyCount = hittable,
+                    HasLosToEnemy = true
                 };
             }
-
-            return null;
-        }
-
-        /// <summary>
-        /// ★ v3.9.42: 경로 위에서 주어진 위치에 가장 가까운 노드 인덱스 찾기
-        /// </summary>
-        /// <summary>Length in metres of the route from step i to its end.</summary>
-        private static float RouteLengthFrom(List<GraphNode> path, int i)
-        {
-            float total = 0f;
-            for (int k = i; k < path.Count - 1; k++)
-                total += Vector3.Distance((Vector3)path[k].position, (Vector3)path[k + 1].position);
-            return total;
-        }
-
-        private static int FindNearestNodeOnPath(Vector3 position, List<GraphNode> path)
-        {
-            int bestIdx = -1;
-            float bestDist = float.MaxValue;
-
-            // 경로 전반부만 탐색 (현재 위치는 경로 시작 부분에 있을 것)
-            int searchLimit = Math.Min(path.Count, path.Count / 2 + 5);
-            for (int i = 0; i < searchLimit; i++)
+            if (hittableCandidate != null)
             {
-                var node = path[i] as CustomGridNodeBase;
-                if (node == null) continue;
-
-                float dist = Vector3.Distance(position, node.Vector3Position);
-                if (dist < bestDist)
-                {
-                    bestDist = dist;
-                    bestIdx = i;
-                }
+                Log.Engine.Info($"[MovementAPI] {unit.CharacterName}: approach to an attack tile ({hittableCandidate.Position.x:F1},{hittableCandidate.Position.z:F1}) dist={hittableClosestDist:F1}m, pathRisk={hittableLowestRisk:F1}, hittable={hittableBestCount} to {target.CharacterName}");
+                return hittableCandidate;
             }
 
-            // 2타일(2.7m) 이내여야 유효한 매칭
-            return bestDist < 2.7f ? bestIdx : -1;
+            return WalkingApproach.FindStep(unit, target, tiles, predictedMP > 0 ? predictedMP : CombatAPI.GetCurrentMP(unit));
         }
 
         #endregion
