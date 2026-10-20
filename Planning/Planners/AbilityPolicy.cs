@@ -49,6 +49,13 @@ namespace CompanionAI_v3.Planning.Planners
                     situation.HeldAcrobaticArtistry = situation.HeldAcrobaticArtistry ?? a;
                     return true;
                 });
+                // Word of the Emperor raises the Veil each cast: only as a group buff (WordOfTheEmperorPlanner)
+                RemoveWhere(situation, a =>
+                {
+                    if (!WordOfTheEmperorPlanner.IsWordOfTheEmperor(a)) return false;
+                    situation.HeldWordOfTheEmperor = situation.HeldWordOfTheEmperor ?? a;
+                    return true;
+                });
                 // Raining Blood only pays off before a single-target melee attack: RainingBloodPlanner places it
                 RemoveWhere(situation, a =>
                 {

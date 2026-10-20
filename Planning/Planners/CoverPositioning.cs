@@ -34,6 +34,12 @@ namespace CompanionAI_v3.Planning.Planners
                 // A move already in the plan is the plan's own positioning; this runs on the plan after it
                 foreach (var a in actions)
                     if (a.Type == ActionType.Move) return;
+                // Perfect Spot (planned or on) ends when the unit moves
+                if (PerfectSpotPlanner.IsActive(unit) || actions.Exists(a => PerfectSpotPlanner.IsPerfectSpot(a.Ability)))
+                {
+                    Log.Planning.Info($"[{roleName}] Cover move skipped: keeping Perfect Spot");
+                    return;
+                }
                 if (CombatAPI.IsInThreateningArea(unit)) return;
                 if (situation.Enemies == null || situation.Enemies.Count == 0) return;
 

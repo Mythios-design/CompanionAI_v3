@@ -958,6 +958,12 @@ namespace CompanionAI_v3.Core
             if (currentMP <= 0f) return false;
             var preference = CombatAPI.GetEffectiveRangePreference(unit);
             if (preference != Settings.RangePreference.PreferRanged && preference != Settings.RangePreference.PreferMelee) return false;
+            if (Planning.Planners.PerfectSpotPlanner.IsActive(unit))
+            {
+                Log.Engine.Info($"[Orchestrator] {unitName}: no end-of-turn reposition - keeping Perfect Spot");
+                turnState.EndOfTurnRepositionDone = true;
+                return false;
+            }
 
             turnState.EndOfTurnRepositionDone = true;
             turnState.EndOfTurnRepositionPending = true;
@@ -1563,6 +1569,7 @@ namespace CompanionAI_v3.Core
             RollbackLastCastRecord(turnState, ability);
             Planning.Planners.BladedancerTactics.OnCastRefused(unit, ability);
             if (ability != null) AbilityUsageTracker.MarkFailed(unit.UniqueId, ability);
+            turnState.MarkRefused(ability);
 
             turnState.CastRefusedCount++;
             turnState.Plan?.Cancel("Cast refused by game");

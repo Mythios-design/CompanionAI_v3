@@ -275,6 +275,9 @@ namespace CompanionAI_v3.Analysis
         /// <summary>Acrobatic Artistry, held out of every list: offered at the end of the turn (AcrobaticArtistryPlanner).</summary>
         public AbilityData HeldAcrobaticArtistry { get; set; }
 
+        /// <summary>Word of the Emperor, held out of every list: a group buff with leftover AP (WordOfTheEmperorPlanner).</summary>
+        public AbilityData HeldWordOfTheEmperor { get; set; }
+
         /// <summary>사용 가능한 공격</summary>
         public List<AbilityData> AvailableAttacks { get; set; } = new List<AbilityData>();
 
@@ -523,6 +526,7 @@ namespace CompanionAI_v3.Analysis
             HeldRainingBlood = null;
             HeldTacticalKnowledge = null;
             HeldAcrobaticArtistry = null;
+            HeldWordOfTheEmperor = null;
             AvailableAttacks.Clear();
             AvailableHeals.Clear();
             AvailableDebuffs.Clear();

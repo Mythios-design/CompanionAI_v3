@@ -642,15 +642,22 @@ namespace CompanionAI_v3.GameInterface
 
             try
             {
-                // ★ 소모품 충전 횟수 체크 (charges=0이면 사용 불가)
-                if (ability.SourceItem != null)
+                // Item charges: consumables and charge-spending equipment (e.g. a digital weapon ring). The game
+                // refuses the cast with no charges left (GetAvailableForCastCount reads the same charges)
+                var sourceItem = ability.SourceItem;
+                if (sourceItem != null && (sourceItem is Kingmaker.Items.ItemEntityUsable || sourceItem.IsSpendCharges)
+                    && sourceItem.Charges <= 0)
                 {
-                    var usableItem = ability.SourceItem as Kingmaker.Items.ItemEntityUsable;
-                    if (usableItem != null && usableItem.Charges <= 0)
-                    {
-                        reasons.Add("No charges remaining");
-                        return false;
-                    }
+                    reasons.Add("No charges remaining");
+                    return false;
+                }
+
+                // The game refused this ability earlier this turn: don't plan it again until the next turn
+                if (Core.TurnOrchestrator.Instance?.GetCurrentTurnState() is Core.TurnState turnState
+                    && turnState.Unit == ability.Caster && turnState.IsRefusedThisTurn(ability))
+                {
+                    reasons.Add("Refused by the game this turn");
+                    return false;
                 }
 
                 // ★ 핵심: GetUnavailabilityReasons() 사용 - v2.2와 동일

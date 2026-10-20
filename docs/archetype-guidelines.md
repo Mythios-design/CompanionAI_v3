@@ -173,6 +173,7 @@ A granted turn is wasted on an ally who can't act with it. `TurnGrantPolicy` dec
 - Expose Weakness is sometimes cast again on a target that already has it, as a leftover-AP spend.
 - Abilities not in the party yet: Precise Attack, Perfect Spot, Joint Analysis.
 - **Tactical Knowledge** (Pasqal, `2a417cde46674ae0a5da8dcfd9ec621d`): after his setup and shot, centred on the enemy that removes the most exploits (all stacks of a lone enemy in the 5-cell circle, or 1 per enemy). The buff replaces itself, so it is cast only when it removes more than the buff already active this combat. 4 or more removed may take the AP of a leftover Analyse Enemies. Built: `TacticalKnowledgePlanner.cs`.
+- **Perfect Spot** (`d0f95ed472d542579026e8a8b8eb2bab`, buff `bca05f18...`): +15 Ballistic Skill, +15 Perception and +25% cover strength until combat ends, removed the moment the unit moves. Cast first in the turn, only when the plan attacks without moving and the tile has cover; otherwise dropped (a move would waste it). While it is on: attack from here over walking to another attack tile, no cover step, no end-of-turn reposition. Built: `PerfectSpotPlanner.cs`.
 
 > **Decision:** Idira is an Operative, so the one-target turn applies to her as built.
 
@@ -251,6 +252,10 @@ A granted turn is wasted on an ally who can't act with it. `TurnGrantPolicy` dec
 > **Decision:** setting up taunts is better than holding position. No change.
 
 ---
+
+## Sanctic powers (Heinrix)
+
+- **Word of the Emperor** (Sanctic, `6285e5ba2a804e3d9df1dd5f7fa819f2`): 1 AP, point within 12 cells, stacking Resolve for allies within 5 cells until combat ends; raises the Veil by 1. A group buff with leftover AP only: on the point covering the most allies, at least 3 (Heinrix counts), and only while the Veil is in the safe range. Never filler. Built: `WordOfTheEmperorPlanner.cs`.
 
 ## Psyker powers (Idira)
 

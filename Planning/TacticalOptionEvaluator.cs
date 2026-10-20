@@ -205,6 +205,13 @@ namespace CompanionAI_v3.Planning
                 }
             }
 
+            // Perfect Spot on: it ends when the unit moves, so attack from here when that's possible
+            if (bestIdx != 0 && result.AllOptions[0].IsViable && Planners.PerfectSpotPlanner.IsActive(situation.Unit))
+            {
+                bestIdx = 0;
+                Log.Planning.Info($"[{roleName}] TacticalEval: attacking from here - keeping Perfect Spot");
+            }
+
             result.BestOption = result.AllOptions[bestIdx];
             result.ChosenStrategy = result.BestOption.Strategy;
 

@@ -1181,6 +1181,9 @@ namespace CompanionAI_v3.Planning.Plans
             Planners.BladedancerPositioning.PlanEngagementMove(situation, actions, ref remainingMP, RoleName);
 
             // Ranged characters: with MP left, step into better cover
+            // Perfect Spot: first in the turn when attacking from cover without moving, else dropped
+            Planners.PerfectSpotPlanner.Arrange(actions, situation, ref remainingAP, RoleName);
+
             Planners.CoverPositioning.PlanCoverMove(situation, actions, ref remainingMP, RoleName);
 
 
@@ -1190,6 +1193,9 @@ namespace CompanionAI_v3.Planning.Plans
 
 
             // Blood Phial: lowest-priority AP spend, after everything else (goes before a turn-ending ability)
+            // Word of the Emperor: group buff with leftover AP, never filler
+            Planners.WordOfTheEmperorPlanner.Append(actions, situation, ref remainingAP, RoleName);
+
             Planners.BloodPhialPlanner.Append(actions, situation, ref remainingAP, RoleName);
 
             // 행동 없으면 턴 종료

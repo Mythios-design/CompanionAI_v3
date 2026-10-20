@@ -191,6 +191,21 @@ namespace CompanionAI_v3.Core
         /// <summary>Casts the game refused this turn after the mod sent them (see TurnOrchestrator.NotifyCastRefused).</summary>
         public int CastRefusedCount { get; set; }
 
+        /// <summary>Abilities (GUID) the game refused this turn: kept out of planning until the next turn.</summary>
+        private readonly HashSet<string> _refusedAbilities = new HashSet<string>();
+
+        public void MarkRefused(AbilityData ability)
+        {
+            string guid = ability?.Blueprint?.AssetGuid?.ToString();
+            if (guid != null) _refusedAbilities.Add(guid);
+        }
+
+        public bool IsRefusedThisTurn(AbilityData ability)
+        {
+            string guid = ability?.Blueprint?.AssetGuid?.ToString();
+            return guid != null && _refusedAbilities.Contains(guid);
+        }
+
         /// <summary>True once the end-of-turn top-up reload has been considered this turn.</summary>
         public bool EndOfTurnReloadChecked { get; set; }
 
