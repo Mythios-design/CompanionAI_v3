@@ -167,6 +167,12 @@ namespace CompanionAI_v3.Planning.Planners
         {
             var unit = situation.Unit;
             if (sentence == null || situation.CurrentMP < 1f || AllyStateCache.HasBuff(target, sentence)) return false;
+            // Moving ends Perfect Spot, worth more for the rest of combat than one Death Sentence
+            if (PerfectSpotPlanner.IsActive(unit))
+            {
+                Log.Planning.Info($"[Operative] {unit.CharacterName}: no move into Death Sentence range - keeping Perfect Spot");
+                return false;
+            }
             float sentenceRange = CombatAPI.GetAbilityRangeInTiles(sentence);
             if (sentenceRange <= 0 || sentenceRange >= 1000 || CombatAPI.GetDistanceInTiles(shootFrom, target) <= sentenceRange) return false;
 

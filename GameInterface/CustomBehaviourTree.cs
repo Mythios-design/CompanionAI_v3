@@ -660,6 +660,7 @@ namespace CompanionAI_v3.GameInterface
                         context.AbilityTarget = result.Target;
                         // ★ v3.5.33: Stale 이동 데이터 클리어 - Charge 후 이동 버그 방지
                         context.FoundBetterPlace = default;
+                        TurnOrchestrator.Instance.NoteCastSent(unit);
                         Log.Engine.Info($"[CompanionAIDecisionNode] {unit.CharacterName}: Cast {result.Ability?.Name} -> {result.Target?.Entity}");
                         return Status.Success;  // → Selector가 TaskNodeCastAbility 실행
 

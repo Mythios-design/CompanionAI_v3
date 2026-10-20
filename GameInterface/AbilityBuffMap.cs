@@ -53,7 +53,7 @@ namespace CompanionAI_v3.GameInterface
                     foreach (var component in components)
                     {
                         if (component == null) continue;
-                        WalkObject(component, casterScope: false, depth: 0, result);
+                        WalkObject(component, casterScope: false, depth: 0, (node, casterScope) => CollectBuff(node, casterScope, result));
                     }
                 }
             }
@@ -110,19 +110,32 @@ namespace CompanionAI_v3.GameInterface
             lock (_lock) { _cache.Clear(); }
         }
 
-        private static void WalkObject(object node, bool casterScope, int depth, Result result)
+        /// <summary>
+        /// True when the object's action tree (a blueprint component, action or action list), including actions
+        /// inside conditions and other wrappers, has an action of type T.
+        /// </summary>
+        public static bool ContainsAction<T>(object root) where T : GameAction
+        {
+            bool found = false;
+            WalkObject(root, casterScope: false, depth: 0, (node, _) => { if (node is T) found = true; });
+            return found;
+        }
+
+        private static void CollectBuff(object node, bool casterScope, Result result)
+        {
+            if (!(node is ContextActionApplyBuff applyBuff)) return;
+            var buff = applyBuff.Buff;
+            if (buff == null) return;
+            var list = (casterScope || applyBuff.ToCaster) ? result.CasterBuffs : result.TargetBuffs;
+            if (!list.Contains(buff)) list.Add(buff);
+        }
+
+        /// <summary>Visits every action under node (visit gets the node and whether it runs on the caster).</summary>
+        private static void WalkObject(object node, bool casterScope, int depth, Action<object, bool> visit)
         {
             if (node == null || depth > MaxDepth) return;
 
-            if (node is ContextActionApplyBuff applyBuff)
-            {
-                var buff = applyBuff.Buff;
-                if (buff != null)
-                {
-                    var list = (casterScope || applyBuff.ToCaster) ? result.CasterBuffs : result.TargetBuffs;
-                    if (!list.Contains(buff)) list.Add(buff);
-                }
-            }
+            visit(node, casterScope);
 
             bool childCasterScope = casterScope || node is ContextActionOnContextCaster;
 
@@ -136,26 +149,26 @@ namespace CompanionAI_v3.GameInterface
                 switch (value)
                 {
                     case ActionList list:
-                        WalkActions(list.Actions, childCasterScope, depth + 1, result);
+                        WalkActions(list.Actions, childCasterScope, depth + 1, visit);
                         break;
                     case ActionList[] lists:
-                        foreach (var l in lists) if (l != null) WalkActions(l.Actions, childCasterScope, depth + 1, result);
+                        foreach (var l in lists) if (l != null) WalkActions(l.Actions, childCasterScope, depth + 1, visit);
                         break;
                     case GameAction[] actions:
-                        WalkActions(actions, childCasterScope, depth + 1, result);
+                        WalkActions(actions, childCasterScope, depth + 1, visit);
                         break;
                     case GameAction action:
-                        WalkObject(action, childCasterScope, depth + 1, result);
+                        WalkObject(action, childCasterScope, depth + 1, visit);
                         break;
                 }
             }
         }
 
-        private static void WalkActions(GameAction[] actions, bool casterScope, int depth, Result result)
+        private static void WalkActions(GameAction[] actions, bool casterScope, int depth, Action<object, bool> visit)
         {
             if (actions == null) return;
             foreach (var action in actions)
-                WalkObject(action, casterScope, depth, result);
+                WalkObject(action, casterScope, depth, visit);
         }
 
         private static FieldInfo[] GetActionFields(Type type)

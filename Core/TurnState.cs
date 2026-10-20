@@ -191,6 +191,9 @@ namespace CompanionAI_v3.Core
         /// <summary>Casts the game refused this turn after the mod sent them (see TurnOrchestrator.NotifyCastRefused).</summary>
         public int CastRefusedCount { get; set; }
 
+        /// <summary>AP when the last cast was handed to the game (-1 before any): tells a refusal from a cast that landed.</summary>
+        public float APWhenCastSent { get; set; } = -1f;
+
         /// <summary>Abilities (GUID) the game refused this turn: kept out of planning until the next turn.</summary>
         private readonly HashSet<string> _refusedAbilities = new HashSet<string>();
 

@@ -24,6 +24,16 @@ namespace CompanionAI_v3.Planning.Planners
     /// </summary>
     public static class BuffPlanner
     {
+        // Firearm Mastery (SoldierUltimateAbility) and its Desperate Measure version (SoldierDesperateAbility)
+        private const string FIREARM_MASTERY = "446277008fe14da194116dc74d804a13";
+        private const string FIREARM_MASTERY_DESPERATE = "1ac5c22b5f0c47b380b7205696e8409e";
+
+        private static bool IsFirearmMastery(AbilityData ability)
+        {
+            string guid = ability?.Blueprint?.AssetGuid?.ToString();
+            return guid == FIREARM_MASTERY || guid == FIREARM_MASTERY_DESPERATE;
+        }
+
         /// <summary>
         /// ★ v3.8.41: 통합 궁극기 계획 (모든 역할 공통)
         ///
@@ -144,6 +154,13 @@ namespace CompanionAI_v3.Planning.Planners
                     break;
 
                 case CombatAPI.UltimateTargetType.SelfBuff:
+                    // Firearm Mastery's free attacks last only this turn: wasted with nothing to shoot from here.
+                    // It costs 0 AP, so the replan after a move to an attack tile still offers it.
+                    if (IsFirearmMastery(ability) && (situation.HittableEnemies == null || situation.HittableEnemies.Count == 0))
+                    {
+                        Log.Planning.Info($"[{roleName}] {contextLabel}: {ability.Name} held - no enemy to attack from here this turn");
+                        return null;
+                    }
                     target = new TargetWrapper(unit); targetDesc = "self";
                     break;
 

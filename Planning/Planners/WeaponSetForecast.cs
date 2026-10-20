@@ -221,7 +221,7 @@ namespace CompanionAI_v3.Planning.Planners
 
         /// <summary>
         /// True when a weapon attack that ends weapon attacks was made this turn: every weapon attack in hand is on
-        /// cooldown, so the other set's are too (they share the game's weapon attack group).
+        /// cooldown with no free use left, so the other set's are too (they share the game's weapon attack group).
         /// </summary>
         public static bool WeaponAttacksSpent(BaseUnitEntity unit)
         {
@@ -236,7 +236,8 @@ namespace CompanionAI_v3.Planning.Planners
                 if (data?.Weapon == null || (data.Weapon != primary && data.Weapon != secondary)) continue;
                 if (AbilityDatabase.IsReload(data) || !AbilityPolicy.EndsWeaponAttacks(data)) continue;
                 any = true;
-                if (!data.IsOnCooldown) return false;
+                // Free uses the game still grants (Firearm Mastery, Run and Gun, ...) count as attacks left
+                if (!data.IsOnCooldown || WeaponAttackAllowance.Remaining(unit, data, out _) > 0) return false;
             }
             return any;
         }

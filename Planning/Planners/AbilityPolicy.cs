@@ -28,13 +28,7 @@ namespace CompanionAI_v3.Planning.Planners
             if (situation?.Unit == null) return;
             try
             {
-                // Blood Phial is the last AP spend: kept out of every pick, used by BloodPhialPlanner at the end
-                RemoveWhere(situation, a =>
-                {
-                    if (!BloodPhialPlanner.IsBloodPhial(a)) return false;
-                    situation.HeldBloodPhial = situation.HeldBloodPhial ?? a;
-                    return true;
-                });
+                // Blood Phial is held by the analyzer before its range filter (SituationAnalyzer.AnalyzeAbilities)
                 // Tactical Knowledge strips exploits: TacticalKnowledgePlanner places it after the Operative's setup and shot
                 RemoveWhere(situation, a =>
                 {

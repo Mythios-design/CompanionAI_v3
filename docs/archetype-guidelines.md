@@ -98,7 +98,7 @@ A granted turn is wasted on an ally who can't act with it. `TurnGrantPolicy` dec
 
 **Not built yet:**
 
-- Abilities not in the party yet: Captive Audience, Veil of Blades, Oath of Vengeance. Acrobatic Artistry is built but untested until she takes it.
+- Abilities not in the party yet: Captive Audience, Veil of Blades, Oath of Vengeance. Acrobatic Artistry is built; she has it now, untested in play (until this fix the analyzer dropped it as unclassified).
 
 > **Decision (final, 2026-10-18):** option A. The game pays the oath back only if her *next* attack on the sworn enemy kills it, and each oath costs 14 to 28% of her HP. So she swears only on the lowest-HP enemy her next attack can kill, at most once a turn, and attacks it next. "Can kill" means on her best damage roll, not her average (changed after a fight where her average hit never reached any enemy's HP and she swore no oath). Earlier the same day the rule was "an oath every turn on any enemy in reach" with no HP limit; in tests that cost her up to 55% HP in one turn with nothing back. No HP limit. The leftover-AP step never casts Blood Oath.
 
@@ -111,7 +111,7 @@ A granted turn is wasted on an ally who can't act with it. `TurnGrantPolicy` dec
 | Ability | GUID | Rule |
 |---|---|---|
 | Raining Blood | `e299c13f2278479bbd4e23269af5657c` | Blood Phial refill. Only while the phial is empty, only right before a single-target melee attack this turn. 1 AP reserved for it. |
-| Blood Phial (item) | `29dd732891604e3db9913065a7f4e2d0` | Lowest-priority spend. Thrown where the 3×3 pool covers the most enemies (2 each) and allies (1 each). Not thrown once no enemies are left. |
+| Blood Phial (item) | `29dd732891604e3db9913065a7f4e2d0` | Lowest-priority spend. Thrown where the 3×3 pool covers the most enemies (2 each) and allies (1 each). Not thrown once no enemies are left. Held before the melee range filter, which would otherwise drop it as a ranged grenade. |
 
 **Built:** `RainingBloodPlanner.cs`, `BloodPhialPlanner.cs`.
 
@@ -173,7 +173,7 @@ A granted turn is wasted on an ally who can't act with it. `TurnGrantPolicy` dec
 - Expose Weakness is sometimes cast again on a target that already has it, as a leftover-AP spend.
 - Abilities not in the party yet: Precise Attack, Perfect Spot, Joint Analysis.
 - **Tactical Knowledge** (Pasqal, `2a417cde46674ae0a5da8dcfd9ec621d`): after his setup and shot, centred on the enemy that removes the most exploits (all stacks of a lone enemy in the 5-cell circle, or 1 per enemy). The buff replaces itself, so it is cast only when it removes more than the buff already active this combat. 4 or more removed may take the AP of a leftover Analyse Enemies. Built: `TacticalKnowledgePlanner.cs`.
-- **Perfect Spot** (`d0f95ed472d542579026e8a8b8eb2bab`, buff `bca05f18...`): +15 Ballistic Skill, +15 Perception and +25% cover strength until combat ends, removed the moment the unit moves. Cast first in the turn, only when the plan attacks without moving and the tile has cover; otherwise dropped (a move would waste it). While it is on: attack from here over walking to another attack tile, no cover step, no end-of-turn reposition. Built: `PerfectSpotPlanner.cs`.
+- **Perfect Spot** (`d0f95ed472d542579026e8a8b8eb2bab`, buff `bca05f18...`): +15 Ballistic Skill, +15 Perception and +25% cover strength until combat ends, removed the moment the unit moves. Cast first in the turn, only when the plan attacks without moving and the tile has cover; otherwise dropped (a move would waste it). While it is on: attack from here over walking to another attack tile, no cover step, no end-of-turn reposition, no move into Death Sentence range. Built: `PerfectSpotPlanner.cs`.
 
 > **Decision:** Idira is an Operative, so the one-target turn applies to her as built.
 
@@ -188,6 +188,7 @@ A granted turn is wasted on an ally who can't act with it. `TurnGrantPolicy` dec
 - **Arc Rifle:** its chain is blocked when an ally stands within 2 tiles of the target. That depends only on the target's location, so moving doesn't fix it.
 - **Long-Las:** the fallback when the Arc Rifle is blocked.
 - **Swap rule:** switch when the set in hand can't attack anyone and the other set can, from here or after moving.
+- **No swap for a bonus attack:** a swap counts as giving a free attack only if a weapon-switch trigger on the unit adds a bonus use. None in the class, gear, weapon, unit, buff or DLC blueprints does (the only one, on the Deflection Gloves, adds deflection), so the end-of-turn swap "for rotation" no longer happens.
 
 > **Decision:** unsure for now. Thordan keeps the current rule (switch to the Long-Las when the Arc Rifle can't attack anyone). Revisit with a dump taken with the Long-Las in hand.
 
@@ -202,7 +203,7 @@ A granted turn is wasted on an ally who can't act with it. `TurnGrantPolicy` dec
 | Run and Gun | +MP, next attack costs 1 less AP and doesn't count toward the attack limit. Winded next turn. |
 | Rapid Fire | Next burst has double rate of fire, -25% damage, random trajectories (an ally risk). |
 | Revel in Slaughter | After 3 kills: removes winded, adds BS and crit. |
-| Firearm Mastery | Ultimate. |
+| Firearm Mastery | Ultimate. Extra free attacks this turn, so only cast with an enemy to attack from where she stands (0 AP: the replan after a move can still cast it). |
 
 **Priorities:**
 

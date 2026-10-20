@@ -1370,14 +1370,10 @@ namespace CompanionAI_v3.GameInterface
         }
 
         /// <summary>
-        /// ★ v3.9.88: 유닛이 무기 전환 시 보너스 공격을 받는지 확인
-        /// WeaponSetChangedTrigger가 있으면 무기 전환 시 ActionList 실행
-        /// → ContextActionAddBonusAbilityUsage로 보너스 공격 부여 (Versatility 등)
-        ///
-        /// 게임 메커니즘: PrimaryHandAbilityGroup 공유 쿨다운
-        /// - 무기 공격 사용 → 해당 그룹 전체 쿨다운 (같은 슬롯의 모든 무기)
-        /// - 무기 세트 전환만으로는 쿨다운 우회 불가
-        /// - WeaponSetChangedTrigger → ContextActionAddBonusAbilityUsage → IsBonusUsage=true → 쿨다운 우회
+        /// True when switching weapon sets grants a free weapon attack: a weapon-switch trigger
+        /// (WeaponSetChangedTrigger) on the unit whose actions add a bonus ability use. Weapon attacks share one
+        /// cooldown, so a switch alone never allows another attack. Other switch triggers (the Deflection Gloves'
+        /// deflection buff) don't count.
         /// </summary>
         public static bool HasWeaponSwitchBonusAttack(BaseUnitEntity unit)
         {
@@ -1385,13 +1381,28 @@ namespace CompanionAI_v3.GameInterface
 
             try
             {
-                return unit.Facts.HasComponent<WeaponSetChangedTrigger>(null);
+                foreach (var trigger in unit.Facts.GetComponents<WeaponSetChangedTrigger>())
+                {
+                    if (trigger == null) continue;
+                    if (!_switchTriggerGrantsAttack.TryGetValue(trigger, out bool grants))
+                    {
+                        grants = AbilityBuffMap.ContainsAction<ContextActionAddBonusAbilityUsage>(trigger);
+                        _switchTriggerGrantsAttack[trigger] = grants;
+                    }
+                    if (grants) return true;
+                }
+                return false;
             }
-            catch
+            catch (Exception ex)
             {
+                Log.Engine.Error(ex, $"[CombatAPI] Reading weapon-switch triggers failed for {unit.CharacterName}");
                 return false;
             }
         }
+
+        // Blueprint components are shared and never change in play: each trigger is read once
+        private static readonly Dictionary<WeaponSetChangedTrigger, bool> _switchTriggerGrantsAttack =
+            new Dictionary<WeaponSetChangedTrigger, bool>();
 
         /// <summary>
         /// ★ v3.8.39: 능력이 궁극기(HeroicAct 또는 DesperateMeasure)인지 확인

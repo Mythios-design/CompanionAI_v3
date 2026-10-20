@@ -905,6 +905,14 @@ namespace CompanionAI_v3.Analysis
                     $"CanTargetEnemies={bp?.CanTargetEnemies}, CanTargetPoint={bp?.CanTargetPoint}, " +
                     $"Range={rangeInfo}, Weapon={ability.Weapon != null}");
 
+                // Acrobatic Artistry targets only her and the game marks it Harmful, so no branch below keeps it.
+                // In the buff list, AbilityPolicy holds it for the end-of-turn planner (AcrobaticArtistryPlanner).
+                if (Planning.Planners.AcrobaticArtistryPlanner.IsAcrobaticArtistry(ability))
+                {
+                    situation.AvailableBuffs.Add(ability);
+                    continue;
+                }
+
                 switch (timing)
                 {
                     case AbilityTiming.Reload:
@@ -1151,6 +1159,15 @@ namespace CompanionAI_v3.Analysis
             var gapClosers = situation.AvailableAttacks
                 .Where(a => AbilityDatabase.IsGapCloser(a))
                 .ToList();
+
+            // Blood Phial is the last AP spend (BloodPhialPlanner), whatever the range preference. Held here, before
+            // the filter below drops it as a ranged grenade for melee units, and before hittable counting uses it.
+            situation.AvailableAttacks.RemoveAll(a =>
+            {
+                if (!Planning.Planners.BloodPhialPlanner.IsBloodPhial(a)) return false;
+                situation.HeldBloodPhial = situation.HeldBloodPhial ?? a;
+                return true;
+            });
 
             // ★ RangePreference 필터 적용 (CombatHelpers 사용)
             situation.AvailableAttacks = CombatHelpers.FilterAbilitiesByRangePreference(

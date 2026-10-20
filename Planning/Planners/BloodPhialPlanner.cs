@@ -16,8 +16,8 @@ using CompanionAI_v3.Logging;
 namespace CompanionAI_v3.Planning.Planners
 {
     /// <summary>
-    /// Blood Phial is the lowest-priority AP spend. AbilityPolicy takes it out of every attack list after analysis
-    /// (into Situation.HeldBloodPhial), and this planner uses it as the last step of a plan, with AP left after
+    /// Blood Phial is the lowest-priority AP spend. The analyzer takes it out of the attack list before the range
+    /// filter (into Situation.HeldBloodPhial), and this planner uses it as the last step of a plan, with AP left after
     /// everything else.
     /// The pool covers the target cell and the 8 around it. Allies standing in it gain bloodblessed (+damage),
     /// enemies bloodstained (+damage taken), so both count: 2 per enemy (helps every attacker), 1 per ally,
