@@ -692,6 +692,8 @@ namespace CompanionAI_v3.Planning.Plans
             // Ranged characters: with MP left, step into better cover
             // Perfect Spot: first in the turn when attacking from cover without moving, else dropped
             Planners.PerfectSpotPlanner.Arrange(actions, situation, ref remainingAP, RoleName);
+            // Soldier: Rapid Fire / Concentrated Fire before the attack they work on, one free Soldier ability per plan
+            Planners.SoldierBuffPlanner.Arrange(actions, situation, ref remainingAP, RoleName);
 
             Planners.CoverPositioning.PlanCoverMove(situation, actions, ref remainingMP, RoleName);
 

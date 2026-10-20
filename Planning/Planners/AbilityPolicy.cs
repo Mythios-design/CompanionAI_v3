@@ -50,6 +50,13 @@ namespace CompanionAI_v3.Planning.Planners
                     situation.HeldWordOfTheEmperor = situation.HeldWordOfTheEmperor ?? a;
                     return true;
                 });
+                // Rapid Fire and Concentrated Fire only work on one attack type: SoldierBuffPlanner places them before one
+                RemoveWhere(situation, a =>
+                {
+                    if (SoldierBuffPlanner.IsRapidFire(a)) { situation.HeldRapidFire = situation.HeldRapidFire ?? a; return true; }
+                    if (SoldierBuffPlanner.IsConcentratedFire(a)) { situation.HeldConcentratedFire = situation.HeldConcentratedFire ?? a; return true; }
+                    return false;
+                });
                 // Raining Blood only pays off before a single-target melee attack: RainingBloodPlanner places it
                 RemoveWhere(situation, a =>
                 {

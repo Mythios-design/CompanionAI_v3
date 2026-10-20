@@ -202,6 +202,7 @@ A granted turn is wasted on an ally who can't act with it. `TurnGrantPolicy` dec
 |---|---|
 | Run and Gun | +MP, next attack costs 1 less AP and doesn't count toward the attack limit. Winded next turn. |
 | Rapid Fire | Next burst has double rate of fire, -25% damage, random trajectories (an ally risk). |
+| Concentrated Fire | `81ccaba57178473da52e89e99a42392a`. Buff for her next ranged pattern attack that isn't scatter (shotguns, flamers, Blast Wave's Rending Shots); Single Shot and Burst Fire don't use it. 1 AP, 1-round cooldown. |
 | Revel in Slaughter | After 3 kills: removes winded, adds BS and crit. |
 | Firearm Mastery | Ultimate. Extra free attacks this turn, so only cast with an enemy to attack from where she stands (0 AP: the replan after a move can still cast it). |
 
@@ -212,6 +213,8 @@ A granted turn is wasted on an ally who can't act with it. `TurnGrantPolicy` dec
 3. **Stay out of melee reach.** Don't move closer to shoot targets she can already hit.
 
 **Built:** weapon attack cap and free uses (`WeaponAttackAllowance.cs`), weapon swap rules (`BasePlan.WeaponRotation.cs`, `WeaponSetForecast.cs`), end-of-turn cover.
+
+**Attack-type buffs and the free Soldier ability** (`SoldierBuffPlanner.cs`): Rapid Fire goes directly before a planned scatter attack (Burst Fire), Concentrated Fire directly before a planned ranged pattern attack; neither while its buff is still on her (it waits for that attack), and neither without such an attack. The first Soldier career ability in a combat is free (no other Soldier in the party), and until it is used the game reports 0 AP for all of them, so only the first one in a plan is booked free and the rest at full cost.
 
 **Not built yet:** the fix for Argenta ending her turn within a Thief Brute's reach was proposed but not built. She moved closer to shoot the same 5 enemies she could already hit.
 

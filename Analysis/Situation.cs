@@ -278,6 +278,12 @@ namespace CompanionAI_v3.Analysis
         /// <summary>Word of the Emperor, held out of every list: a group buff with leftover AP (WordOfTheEmperorPlanner).</summary>
         public AbilityData HeldWordOfTheEmperor { get; set; }
 
+        /// <summary>Rapid Fire, held out of every list: put right before a scatter attack (SoldierBuffPlanner).</summary>
+        public AbilityData HeldRapidFire { get; set; }
+
+        /// <summary>Concentrated Fire, held out of every list: put right before a ranged pattern attack (SoldierBuffPlanner).</summary>
+        public AbilityData HeldConcentratedFire { get; set; }
+
         /// <summary>사용 가능한 공격</summary>
         public List<AbilityData> AvailableAttacks { get; set; } = new List<AbilityData>();
 
@@ -527,6 +533,8 @@ namespace CompanionAI_v3.Analysis
             HeldTacticalKnowledge = null;
             HeldAcrobaticArtistry = null;
             HeldWordOfTheEmperor = null;
+            HeldRapidFire = null;
+            HeldConcentratedFire = null;
             AvailableAttacks.Clear();
             AvailableHeals.Clear();
             AvailableDebuffs.Clear();
