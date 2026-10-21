@@ -111,6 +111,11 @@ namespace CompanionAI_v3.Planning.Planners
             return null;
         }
 
+        /// <summary>The action is the Voice of Command that opens a pair with Bring It Down! (the second half follows in its group).</summary>
+        public static bool OpensPair(PlannedAction action)
+            => action?.GroupTag != null && action.GroupTag.StartsWith(GroupPrefix)
+               && action.Ability?.Blueprint?.AssetGuid?.ToString() == VOICE_OF_COMMAND;
+
         /// <summary>The normal ally-buff order leaves Bring It Down! to this planner.</summary>
         public static bool Handles(AbilityData buff) => AbilityDatabase.IsBringItDown(buff);
 

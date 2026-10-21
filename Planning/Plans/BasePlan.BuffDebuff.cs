@@ -100,6 +100,57 @@ namespace CompanionAI_v3.Planning.Plans
         protected bool CanAffordBuffWithReservation(float buffCost, float remainingAP, float reservedAP, bool isEssential)
             => BuffPlanner.CanAffordBuffWithReservation(buffCost, remainingAP, reservedAP, isEssential);
 
+        /// <summary>Records a planned ally buff in the (buff:target) pairs and per-ability counts PlanAllyBuff reads.</summary>
+        protected static void RecordPlannedAllyBuff(PlannedAction action, HashSet<string> plannedBuffTargetPairs,
+            Dictionary<string, int> plannedAbilityUseCounts)
+        {
+            string buffGuid = action?.Ability?.Blueprint?.AssetGuid?.ToString();
+            if (string.IsNullOrEmpty(buffGuid)) return;
+            var buffTarget = action.Target?.Entity as BaseUnitEntity;
+            string targetId = buffTarget?.UniqueId ?? buffTarget?.CharacterName ?? "unknown";
+            plannedBuffTargetPairs?.Add($"{buffGuid}:{targetId}");
+            if (plannedAbilityUseCounts == null) return;
+            plannedAbilityUseCounts.TryGetValue(buffGuid, out int count);
+            plannedAbilityUseCounts[buffGuid] = count + 1;
+        }
+
+        /// <summary>
+        /// One ally buff for roles that buff allies on the side (DPS, Tank), added before the plan's first move:
+        /// it was checked from where the unit stands. An Officer order pair (Voice of Command, then Bring It Down!)
+        /// is planned whole; if Bring It Down! doesn't follow, Voice of Command is dropped and its AP refunded.
+        /// </summary>
+        protected void PlanSideAllyBuff(List<PlannedAction> actions, Situation situation, ref float remainingAP)
+        {
+            var grants = new HashSet<string>();
+            var pairs = new HashSet<string>();
+            var counts = new Dictionary<string, int>();
+            var first = PlanAllyBuff(situation, ref remainingAP, null, grants, pairs, counts);
+            if (first == null) return;
+            RecordPlannedAllyBuff(first, pairs, counts);
+
+            var planned = new List<PlannedAction> { first };
+            if (OfficerOrders.OpensPair(first))
+            {
+                var second = PlanAllyBuff(situation, ref remainingAP, null, grants, pairs, counts);
+                if (second != null && second.GroupTag == first.GroupTag)
+                    planned.Add(second);
+                else
+                {
+                    if (second != null) remainingAP += second.APCost;
+                    remainingAP += first.APCost;
+                    Log.Planning.Info($"[{RoleName}] {first.Ability?.Name} dropped: Bring It Down! doesn't follow it");
+                    return;
+                }
+            }
+
+            int moveIndex = actions.FindIndex(a => a.Type == ActionType.Move);
+            if (moveIndex < 0) actions.AddRange(planned);
+            else actions.InsertRange(moveIndex, planned);
+            foreach (var a in planned)
+                Log.Planning.Info($"[{RoleName}] Ally buff planned - {a.Ability?.Name} -> {(a.Target?.Entity as BaseUnitEntity)?.CharacterName ?? "unknown"}" +
+                    (moveIndex >= 0 ? " (before the move)" : ""));
+        }
+
         /// <summary>
         /// ★ v3.7.93: 아군 버프 계획 (BasePlan으로 이동)
         /// Support/Overseer 모두 사용 가능

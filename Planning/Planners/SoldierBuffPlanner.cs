@@ -117,7 +117,7 @@ namespace CompanionAI_v3.Planning.Planners
             {
                 var bp = action.Ability?.Blueprint;
                 if (bp == null || !InSoldierGroup(action.Ability)) continue;
-                float full = bp.ActionPointCost;
+                float full = CombatAPI.GetBaseAPCost(action.Ability);
                 if (action.APCost >= full - 0.01f) continue;
                 if (!freeTaken) { freeTaken = true; continue; }
 
@@ -127,12 +127,7 @@ namespace CompanionAI_v3.Planning.Planners
                 raised.Add(action);
             }
 
-            for (int i = raised.Count - 1; i >= 0 && remainingAP < -0.01f; i--)
-            {
-                remainingAP += raised[i].APCost;
-                actions.Remove(raised[i]);
-                Log.Planning.Info($"[{roleName}] {raised[i].Ability.Name} dropped: not enough AP once the free use is spent");
-            }
+            DiscountBooking.DropUnaffordable(actions, raised, ref remainingAP, roleName, "not enough AP once the free Soldier ability is spent");
         }
 
         private static bool InSoldierGroup(AbilityData ability)

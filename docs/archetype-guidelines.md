@@ -51,7 +51,9 @@ A setup is only worth AP if the thing it sets up actually happens this turn.
 ### 3. Never hit allies
 
 - `maxPlayerAlliesHit` is 0. No area attack, chain or random-target ability may hit an ally.
-- This covers arc weapon chains (checked at the target's location), scatter and burst fire, self-centred attacks like Blade Dance, and cones.
+- This covers arc weapon chains (the game's own trail shape, aimed from the shooting tile through the target), scatter and burst fire, self-centred attacks like Blade Dance, and cones (familiars count as allies).
+- **Single shots too** (`LineOfFireSafety.cs`): a shot that hits the target's cover hits the unit giving that cover, and a shot whose penetration beats the target's armour carries on and rolls against every unit on its line to the weapon's range. So no shot with an ally as the target's cover, or with an ally behind an overpenetrated target on the line.
+- **Rejected actions:** an ability + target the executor rejects (out of reach, unsafe for allies) is not planned again from that tile this turn.
 - If allies block an attack, move to a tile where they don't, rather than accepting the risk.
 
 ### 4. Bonus turns go to allies who can use them
@@ -129,7 +131,7 @@ A granted turn is wasted on an ally who can't act with it. `TurnGrantPolicy` dec
 
 **Priorities:**
 
-1. **Bring It Down! comes before Voice of Command.** First choose the Bring It Down! ally (engaged melee ally, or a ranged ally who can shoot from where they stand).
+1. **Bring It Down! comes before Voice of Command.** First choose the Bring It Down! ally (engaged melee ally, or a ranged ally who can shoot from where they stand). The pair is planned whole for any Officer, whatever the role: Voice of Command is only kept when Bring It Down! follows, and both go before the plan's move (they're checked from where the Officer stands).
 2. **AP for both:** Voice of Command on that ally, then Bring It Down!. That also reaches allies beyond 4 tiles.
 3. **AP for one:** Bring It Down! only.
 4. **No ally worth a bonus turn:** Voice of Command on the best damage dealer, rotating allies because of the 2-round lockout.

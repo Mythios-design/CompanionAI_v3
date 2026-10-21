@@ -394,6 +394,17 @@ namespace CompanionAI_v3.GameInterface
             return RangePreference.Adaptive;
         }
 
+        /// <summary>
+        /// The ability's cost before discounts and modifiers: the weapon slot's AP for an attack from that weapon,
+        /// else the blueprint's (the base RuleCalculateAbilityActionPointCost starts from).
+        /// </summary>
+        public static float GetBaseAPCost(AbilityData ability)
+        {
+            var slot = ability?.SettingsFromItem;
+            if (slot != null && slot.Ability == ability.Blueprint) return slot.AP;
+            return ability?.Blueprint?.ActionPointCost ?? 1;
+        }
+
         public static float GetAbilityAPCost(AbilityData ability)
         {
             if (ability == null) return 1f;

@@ -34,6 +34,44 @@ namespace CompanionAI_v3.GameInterface
         private static readonly Type BonusDataType = AccessTools.Inner(typeof(UnitPartBonusAbility), "BonusAbilityData");
         private static readonly PropertyInfo BonusCountProp = BonusDataType != null ? AccessTools.Property(BonusDataType, "Count") : null;
         private static readonly MethodInfo BonusMatchesMethod = BonusDataType != null ? AccessTools.Method(BonusDataType, "IsCorrectAbility") : null;
+        private static readonly PropertyInfo BonusCostProp = BonusDataType != null ? AccessTools.Property(BonusDataType, "CostBonus") : null;
+
+        /// <summary>One entry of the unit's bonus ability list: uses left, AP cost change, and the abilities it applies to.</summary>
+        public sealed class BonusUse
+        {
+            public int Count;
+            public int CostBonus;
+            internal object Entry;
+            public bool AppliesTo(AbilityData ability)
+                => ability != null && BonusMatchesMethod?.Invoke(Entry, new object[] { ability }) is bool b && b;
+        }
+
+        /// <summary>
+        /// The unit's bonus ability entries with uses left (free attacks from talents, Run and Gun's discount, ...).
+        /// Empty when there are none or the list can't be read.
+        /// </summary>
+        public static List<BonusUse> ReadBonusUses(BaseUnitEntity unit)
+        {
+            var result = new List<BonusUse>();
+            try
+            {
+                var part = unit?.GetBonusAbilityUseOptional();
+                if (part == null || BonusesField == null || BonusCountProp == null || BonusMatchesMethod == null || BonusCostProp == null)
+                    return result;
+                if (!(BonusesField.GetValue(part) is IList list)) return result;
+                foreach (var entry in list)
+                {
+                    if (entry == null || !(BonusCountProp.GetValue(entry) is int count) || count <= 0) continue;
+                    int cost = BonusCostProp.GetValue(entry) is int c ? c : 0;
+                    result.Add(new BonusUse { Count = count, CostBonus = cost, Entry = entry });
+                }
+            }
+            catch (Exception ex)
+            {
+                LogReadFailure(ex, "reading bonus ability uses failed");
+            }
+            return result;
+        }
         private static bool _readFailureLogged;
 
         /// <summary>

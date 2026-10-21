@@ -628,22 +628,10 @@ namespace CompanionAI_v3.Planning.Plans
             {
                 var allyBuffAction = PlanAllyBuff(situation, ref remainingAP, keystoneOnlyGuids, plannedTurnGrantTargets, plannedBuffTargetPairs, plannedAbilityUseCounts);
                 if (allyBuffAction == null) break;
-
-                // ★ v3.8.51: (버프, 타겟) 쌍 추적 → 같은 버프를 다른 아군에게는 허용
-                string buffGuid = allyBuffAction.Ability?.Blueprint?.AssetGuid?.ToString();
-                var buffTarget = allyBuffAction.Target?.Entity as BaseUnitEntity;
-                string targetId = buffTarget?.UniqueId ?? buffTarget?.CharacterName ?? "unknown";
-                if (!string.IsNullOrEmpty(buffGuid))
-                {
-                    plannedBuffTargetPairs.Add($"{buffGuid}:{targetId}");
-                    // ★ v3.14.2: 능력별 계획 횟수 증가
-                    plannedAbilityUseCounts.TryGetValue(buffGuid, out int count);
-                    plannedAbilityUseCounts[buffGuid] = count + 1;
-                }
-
+                RecordPlannedAllyBuff(allyBuffAction, plannedBuffTargetPairs, plannedAbilityUseCounts);
                 actions.Add(allyBuffAction);
                 allyBuffCount++;
-                Log.Planning.Info($"[Overseer] Phase 4.5: Ally Buff #{allyBuffCount} - {allyBuffAction.Ability?.Name} -> {buffTarget?.CharacterName}");
+                Log.Planning.Info($"[Overseer] Phase 4.5: Ally Buff #{allyBuffCount} - {allyBuffAction.Ability?.Name} -> {(allyBuffAction.Target?.Entity as BaseUnitEntity)?.CharacterName}");
             }
 
             // ══════════════════════════════════════════════════════════════
@@ -1185,6 +1173,8 @@ namespace CompanionAI_v3.Planning.Plans
             Planners.PerfectSpotPlanner.Arrange(actions, situation, ref remainingAP, RoleName);
             // Soldier: Rapid Fire / Concentrated Fire before the attack they work on, one free Soldier ability per plan
             Planners.SoldierBuffPlanner.Arrange(actions, situation, ref remainingAP, RoleName);
+            // One-time discounts (a talent's free attack) cover only as many actions as they have uses
+            Planners.DiscountBooking.Arrange(actions, situation, ref remainingAP, RoleName);
 
             Planners.CoverPositioning.PlanCoverMove(situation, actions, ref remainingMP, RoleName);
 

@@ -117,14 +117,7 @@ namespace CompanionAI_v3.Planning.Plans
 
             // ★ v3.9.44: Phase 3.5 - 아군 버프 (CanTargetFriends=true 버프를 아군에게 사용)
             if (remainingAP >= 1f)
-            {
-                var allyBuffAction = PlanAllyBuff(situation, ref remainingAP);
-                if (allyBuffAction != null)
-                {
-                    actions.Add(allyBuffAction);
-                    Log.Planning.Info($"[Tank] Phase 3.5: Ally buff planned - {allyBuffAction.Ability?.Name} -> {(allyBuffAction.Target?.Entity as BaseUnitEntity)?.CharacterName ?? "unknown"}");
-                }
-            }
+                PlanSideAllyBuff(actions, situation, ref remainingAP);
 
             // ★ v3.1.25: Phase 4 - 스마트 도발 시스템
             // - 아군 타겟팅 적 탐지
@@ -838,6 +831,8 @@ namespace CompanionAI_v3.Planning.Plans
             Planners.PerfectSpotPlanner.Arrange(actions, situation, ref remainingAP, RoleName);
             // Soldier: Rapid Fire / Concentrated Fire before the attack they work on, one free Soldier ability per plan
             Planners.SoldierBuffPlanner.Arrange(actions, situation, ref remainingAP, RoleName);
+            // One-time discounts (a talent's free attack) cover only as many actions as they have uses
+            Planners.DiscountBooking.Arrange(actions, situation, ref remainingAP, RoleName);
 
             Planners.CoverPositioning.PlanCoverMove(situation, actions, ref remainingMP, RoleName);
 

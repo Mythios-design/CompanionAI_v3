@@ -477,14 +477,7 @@ namespace CompanionAI_v3.Planning.Plans
             // DPS도 아군에게 사용 가능한 버프(팀 버프, 보호 버프 등)가 있으면 아군에게 사용
             // 자기 공격 버프(Phase 4) 이후, 전투(Phase 5) 이전에 실행
             if (!isRetreatMode && remainingAP >= 1f)
-            {
-                var allyBuffAction = PlanAllyBuff(situation, ref remainingAP);
-                if (allyBuffAction != null)
-                {
-                    actions.Add(allyBuffAction);
-                    Log.Planning.Info($"[DPS] Phase 4.1: Ally buff planned - {allyBuffAction.Ability?.Name} -> {(allyBuffAction.Target?.Entity as BaseUnitEntity)?.CharacterName ?? "unknown"}");
-                }
-            }
+                PlanSideAllyBuff(actions, situation, ref remainingAP);
 
             // ★ v3.1.16: didPlanAttack 변수를 여기서 미리 선언 (Phase 4.4 AOE용)
             bool didPlanAttack = false;
@@ -1357,6 +1350,8 @@ namespace CompanionAI_v3.Planning.Plans
             Planners.PerfectSpotPlanner.Arrange(actions, situation, ref remainingAP, RoleName);
             // Soldier: Rapid Fire / Concentrated Fire before the attack they work on, one free Soldier ability per plan
             Planners.SoldierBuffPlanner.Arrange(actions, situation, ref remainingAP, RoleName);
+            // One-time discounts (a talent's free attack) cover only as many actions as they have uses
+            Planners.DiscountBooking.Arrange(actions, situation, ref remainingAP, RoleName);
 
             Planners.CoverPositioning.PlanCoverMove(situation, actions, ref remainingMP, RoleName);
 
