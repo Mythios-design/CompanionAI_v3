@@ -875,6 +875,33 @@ namespace CompanionAI_v3.GameInterface
         }
 
         /// <summary>
+        /// The pattern trail an attack's weapon casts on whatever it hits (Arc weapons: AbilityTargetsInPatternTrail
+        /// in the on-hit spell), or null. Its shape is aimed from the shooter through the target.
+        /// </summary>
+        public static AbilityTargetsInPatternTrail FindWeaponOnHitTrail(AbilityData ability)
+        {
+            if (ability == null) return null;
+            try
+            {
+                foreach (var effect in ability.AdditionalEffects)
+                {
+                    var actions = effect?.OnHitActions?.Actions;
+                    if (actions == null) continue;
+                    foreach (var action in actions)
+                    {
+                        var trail = (action as ContextActionCastSpell)?.Spell?.GetComponent<AbilityTargetsInPatternTrail>();
+                        if (trail != null) return trail;
+                    }
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Engine.Error(ex, $"[CombatAPI] FindWeaponOnHitTrail failed for {ability.Name}");
+            }
+            return null;
+        }
+
+        /// <summary>
         /// Chain trigger in one on-hit effect (a weapon's or a weapon attack's OnHitActions). Works from blueprints,
         /// so it can also read weapons in the set that isn't in hand.
         /// </summary>

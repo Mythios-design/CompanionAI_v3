@@ -92,6 +92,16 @@
       <HintPath>$(ManagedPath)\StateHasher.dll</HintPath>
       <Private>False</Private>
     </Reference>
+    <!-- Pattern providers (AbilityData as IAbilityDataProviderForPattern) derive from IUIDataProvider -->
+    <Reference Include="Kingmaker.UI.Models.Tooltip.Base">
+      <HintPath>$(ManagedPath)\Kingmaker.UI.Models.Tooltip.Base.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
+    <!-- ReadonlyList (the game's projectile line nodes, AbilityProjectileAttack.CollectNodes) -->
+    <Reference Include="Utility.DotNetExtensions">
+      <HintPath>$(ManagedPath)\Utility.DotNetExtensions.dll</HintPath>
+      <Private>False</Private>
+    </Reference>
 
     <!-- Pathfinding -->
     <Reference Include="AstarPathfindingProject">

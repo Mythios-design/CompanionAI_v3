@@ -474,7 +474,15 @@ namespace CompanionAI_v3.GameInterface
             bool isBurstForGate = CombatAPI.IsBurstAttack(ability);
             if (aoERadius <= 0 && !hasScatterDanger && !isBurstForGate)
             {
-                return IsChainAbilitySafeForTarget(ability, target, casterEntity, allies);
+                // A single shot can still hit the ally giving the target cover, or allies behind it when it overpenetrates
+                int lineAllies = LineOfFireSafety.AlliesAtRisk(ability, fromPosition, casterEntity, target, allies, out string lineWho);
+                int lineMax = AIConfig.GetAoEConfig()?.MaxPlayerAlliesHit ?? 0;
+                if (lineAllies > lineMax)
+                {
+                    if (Main.IsDebugEnabled) Log.Engine.Debug($"[AOE] Line of fire: {ability.Name} -> {target.CharacterName} blocked ({lineWho} on the shot's line)");
+                    return false;
+                }
+                return IsChainAbilitySafeForTarget(ability, target, casterEntity, allies, fromPosition);
             }
 
             // ★ v3.8.65: 게임 검증 — 스캐터 레이 사거리 제한
@@ -658,7 +666,7 @@ namespace CompanionAI_v3.GameInterface
         ///   게임 API 정밀 복제 알고리즘으로 통합 (AllBaseUnits, DistanceToInCells, CheckTarget)
         /// </summary>
         private static bool IsChainAbilitySafeForTarget(
-            AbilityData ability, BaseUnitEntity target, BaseUnitEntity caster, List<BaseUnitEntity> allies)
+            AbilityData ability, BaseUnitEntity target, BaseUnitEntity caster, List<BaseUnitEntity> allies, Vector3 fromPosition)
         {
             if (ability == null || target == null) return true;
 
@@ -683,8 +691,12 @@ namespace CompanionAI_v3.GameInterface
                             return true;
                         }
 
-                        // ally chain 가능 → 시뮬레이션
-                        int weaponAlliesHit = SimulateWeaponChainAllyHits(target, caster, weaponChainRadius, weaponChainMax);
+                        // Ally chain possible. A pattern trail is read from the game's own shape, aimed from the
+                        // shooting tile through the target; otherwise the chain is simulated.
+                        var trail = weaponChainMax >= 50 ? CombatAPI.FindWeaponOnHitTrail(ability) : null;
+                        int weaponAlliesHit = trail != null
+                            ? CountAlliesInTrail(trail, ability, target, caster, fromPosition)
+                            : SimulateWeaponChainAllyHits(target, caster, weaponChainRadius, weaponChainMax);
                         var weaponAoeConfig = AIConfig.GetAoEConfig();
                         int weaponMaxAlliesAllowed = weaponAoeConfig?.MaxPlayerAlliesHit ?? 1;
                         if (weaponAlliesHit > weaponMaxAlliesAllowed)
@@ -735,6 +747,28 @@ namespace CompanionAI_v3.GameInterface
                 Log.Engine.Error(ex, $"[AoESafety] Chain check error");
                 return true;  // 에러 시 안전하게 허용 (기존 동작 유지)
             }
+        }
+
+        /// <summary>
+        /// Party members (not immune to friendly fire) inside the pattern trail a hit on target casts, aimed from the
+        /// shooting tile through the target, as the game computes it (AbilityTargetsInPatternTrail.Select).
+        /// </summary>
+        private static int CountAlliesInTrail(AbilityTargetsInPatternTrail trail, AbilityData ability,
+            BaseUnitEntity target, BaseUnitEntity caster, Vector3 fromPosition)
+        {
+            var casterNode = fromPosition.GetNearestNodeXZ() as CustomGridNodeBase;
+            var targetNode = target.Position.GetNearestNodeXZ() as CustomGridNodeBase;
+            if (casterNode == null || targetNode == null) return 0;
+            var pattern = trail.GetOrientedPattern(ability, casterNode, targetNode);
+            int hit = 0;
+            foreach (var unit in Game.Instance.State.AllBaseUnits)
+            {
+                if (unit == null || unit == caster || unit == target) continue;
+                if (unit.LifeState.IsDead || !unit.IsInCombat || !unit.IsInPlayerParty) continue;
+                if (CombatAPI.IsImmuneToFriendlyFire(unit)) continue;
+                if (AoEPatternHelper.WouldTargetEntity(pattern, unit)) hit++;
+            }
+            return hit;
         }
 
         /// <summary>
