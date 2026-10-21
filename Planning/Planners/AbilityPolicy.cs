@@ -23,6 +23,16 @@ namespace CompanionAI_v3.Planning.Planners
         private const string WeaponAttackGroupName = "WeaponAttackAbilityGroup";
         private const string BREAK_THROUGH = "54f73c2523524544a8d7ffc3807056f0";
 
+        /// <summary>
+        /// Abilities kept out of every pick and placed by their own planner. Code that reads the unit's abilities
+        /// straight from the game (bypassing the situation's lists) must skip these.
+        /// </summary>
+        public static bool IsHeldForOwnPlanner(AbilityData a)
+            => BloodPhialPlanner.IsBloodPhial(a) || TacticalKnowledgePlanner.IsTacticalKnowledge(a)
+               || AcrobaticArtistryPlanner.IsAcrobaticArtistry(a) || WordOfTheEmperorPlanner.IsWordOfTheEmperor(a)
+               || RainingBloodPlanner.IsRainingBlood(a)
+               || SoldierBuffPlanner.IsRapidFire(a) || SoldierBuffPlanner.IsConcentratedFire(a);
+
         public static void Apply(Situation situation)
         {
             if (situation?.Unit == null) return;

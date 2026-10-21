@@ -572,6 +572,7 @@ namespace CompanionAI_v3.Analysis
                 // ★ v3.5.12: Debuff 제외 - 빈틈 노리기 같은 디버프가 Hittable 계산에 포함되는 문제
                 var allAttacks = CombatAPI.GetAvailableAbilities(unit)
                     .Where(a => a.Blueprint?.CanTargetEnemies == true || a.Weapon != null)
+                    .Where(a => !Planning.Planners.AbilityPolicy.IsHeldForOwnPlanner(a))
                     .Where(a => !AbilityDatabase.IsReload(a))
                     .Where(a => !AbilityDatabase.IsTurnEnding(a))
                     .Where(a => !AbilityDatabase.IsHealing(a))

@@ -234,6 +234,12 @@ namespace CompanionAI_v3.GameInterface
                 reason = "Null parameter";
                 return false;
             }
+            // Checked before the cache: a pair rejected at execution may have been cached as usable earlier
+            if (CombatAPI.FailedAtExecutionThisTurn(ability, target))
+            {
+                reason = "Rejected at execution this turn";
+                return false;
+            }
 
             // 키 생성: 능력 UniqueId + 타겟 Id
             // ★ v3.5.36: Point 좌표를 F1(0.1m 단위)로 반올림하여 캐시 히트율 향상

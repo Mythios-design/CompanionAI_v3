@@ -139,7 +139,7 @@ namespace CompanionAI_v3.Planning.Planners
             switch (targetType)
             {
                 case CombatAPI.UltimateTargetType.ImmediateAttack:
-                    var bestEnemy = situation.BestTarget ?? situation.NearestEnemy;
+                    var bestEnemy = FindHeroicAttackTarget(ability, situation, roleName, contextLabel);
                     if (bestEnemy != null) { target = new TargetWrapper(bestEnemy); targetDesc = bestEnemy.CharacterName; }
                     break;
 
@@ -196,6 +196,41 @@ namespace CompanionAI_v3.Planning.Planners
                     var buffTarget = (target.Entity as BaseUnitEntity) ?? unit;
                     return PlannedAction.Buff(ability, buffTarget, $"{contextLabel}: {ability.Name}", cost);
             }
+        }
+
+        /// <summary>
+        /// Target for a Heroic Act attack: the best target, then the nearest enemy, then the rest by distance. The
+        /// first one the game lets the unit attack from here and whose hit doesn't reach an ally (chains, areas).
+        /// </summary>
+        private static BaseUnitEntity FindHeroicAttackTarget(AbilityData ability, Situation situation, string roleName, string contextLabel)
+        {
+            var unit = situation.Unit;
+            var candidates = new List<BaseUnitEntity>();
+            if (situation.BestTarget != null) candidates.Add(situation.BestTarget);
+            if (situation.NearestEnemy != null && !candidates.Contains(situation.NearestEnemy)) candidates.Add(situation.NearestEnemy);
+            if (situation.Enemies != null)
+                foreach (var e in situation.Enemies.OrderBy(e => CombatAPI.GetDistanceInTiles(unit, e)))
+                    if (e != null && !candidates.Contains(e)) candidates.Add(e);
+
+            var skipped = new List<string>();
+            foreach (var enemy in candidates)
+            {
+                if (!enemy.IsConscious || enemy.LifeState.IsDead) continue;
+                if (!CombatAPI.CanUseAbilityOn(ability, new TargetWrapper(enemy), out string reason))
+                {
+                    skipped.Add($"{enemy.CharacterName} ({reason})");
+                    continue;
+                }
+                if (situation.Allies != null && !AoESafetyChecker.IsAoESafeForUnitTarget(ability, unit, enemy, situation.Allies))
+                {
+                    skipped.Add($"{enemy.CharacterName} (would hit an ally)");
+                    continue;
+                }
+                return enemy;
+            }
+            if (skipped.Count > 0)
+                Log.Planning.Info($"[{roleName}] {contextLabel}: {ability.Name} held - no target: {string.Join(", ", skipped.Take(4))}");
+            return null;
         }
 
         /// <summary>

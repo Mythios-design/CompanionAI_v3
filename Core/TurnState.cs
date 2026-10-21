@@ -4,6 +4,7 @@ using Kingmaker.EntitySystem.Entities;
 using Kingmaker.UnitLogic.Abilities;
 using UnityEngine;
 using CompanionAI_v3.Analysis;
+using CompanionAI_v3.GameInterface;
 using CompanionAI_v3.Logging;
 
 namespace CompanionAI_v3.Core
@@ -191,8 +192,44 @@ namespace CompanionAI_v3.Core
         /// <summary>Casts the game refused this turn after the mod sent them (see TurnOrchestrator.NotifyCastRefused).</summary>
         public int CastRefusedCount { get; set; }
 
+        /// <summary>
+        /// Ability + target pairs the executor rejected this turn (out of reach, unsafe for allies, empty area), from
+        /// the caster's tile at the time. CombatAPI.CanUseAbilityOn refuses them so a replan picks something else
+        /// instead of planning the same rejected action until the turn ends. A move makes them usable again.
+        /// </summary>
+        private readonly HashSet<string> _failedTargets = new HashSet<string>();
+
+        public void MarkFailedTarget(AbilityData ability, Kingmaker.Utility.TargetWrapper target)
+        {
+            string key = FailedTargetKey(ability, target);
+            if (key != null) _failedTargets.Add(key);
+        }
+
+        public bool IsFailedTarget(AbilityData ability, Kingmaker.Utility.TargetWrapper target)
+        {
+            if (_failedTargets.Count == 0) return false;
+            string key = FailedTargetKey(ability, target);
+            return key != null && _failedTargets.Contains(key);
+        }
+
+        private static string FailedTargetKey(AbilityData ability, Kingmaker.Utility.TargetWrapper target)
+        {
+            string guid = ability?.Blueprint?.AssetGuid?.ToString();
+            var caster = ability?.Caster;
+            if (guid == null || target == null || caster == null) return null;
+            string targetId = target.Entity?.UniqueId ?? Cell(target.Point);
+            return $"{guid}|{targetId}|{Cell(caster.Position)}";
+        }
+
+        private static string Cell(Vector3 p)
+            => $"{Mathf.RoundToInt(p.x / CombatAPI.GridCellSize)}_{Mathf.RoundToInt(p.z / CombatAPI.GridCellSize)}";
+
         /// <summary>AP when the last cast was handed to the game (-1 before any): tells a refusal from a cast that landed.</summary>
         public float APWhenCastSent { get; set; } = -1f;
+
+        /// <summary>The last cast's target when it was sent (null for self or point casts) and its HP then.</summary>
+        public BaseUnitEntity CastTargetWhenSent { get; set; }
+        public int CastTargetHPWhenSent { get; set; }
 
         /// <summary>Abilities (GUID) the game refused this turn: kept out of planning until the next turn.</summary>
         private readonly HashSet<string> _refusedAbilities = new HashSet<string>();

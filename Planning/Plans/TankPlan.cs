@@ -155,17 +155,14 @@ namespace CompanionAI_v3.Planning.Plans
                 if (situation.IsExtraTurn && bestOption != null && bestOption.RequiresMove)
                 {
                     Log.Planning.Info($"[Tank] SmartTaunt: Skip best option - extra turn + requires move (AP={situation.CurrentAP:F1}, MP={situation.CurrentMP:F1})");
-                    bestOption = null;
-                    for (int i = 0; i < tauntOptions.Count; i++)
-                    {
-                        var alt = tauntOptions[i];
-                        if (alt != null && !alt.RequiresMove)
-                        {
-                            bestOption = alt;
-                            Log.Planning.Info($"[Tank] SmartTaunt: Falling back to no-move option {alt.Ability.Name}");
-                            break;
-                        }
-                    }
+                    bestOption = NoMoveTauntOption(tauntOptions);
+                }
+                // The taunt tile is in a hazard (and we're safe now): taunt from here if any option allows it, else not at all
+                if (bestOption != null && bestOption.RequiresMove && !situation.NeedsAoEEvacuation
+                    && CombatAPI.IsPositionInHazardZone(bestOption.Position, situation.Unit))
+                {
+                    Log.Planning.Info($"[Tank] SmartTaunt: Taunt position rejected - in hazard zone");
+                    bestOption = NoMoveTauntOption(tauntOptions);
                 }
 
                 if (TauntScorer.IsTauntWorthwhile(bestOption))
@@ -193,19 +190,10 @@ namespace CompanionAI_v3.Planning.Plans
                         // 이동이 필요하면 먼저 이동 계획
                         if (bestOption.RequiresMove)
                         {
-                            // ★ v3.19.8: 도발 위치가 위험 구역이면 이동 취소 (현재 안전할 때만)
-                            if (!situation.NeedsAoEEvacuation &&
-                                CombatAPI.IsPositionInHazardZone(bestOption.Position, situation.Unit))
-                            {
-                                Log.Planning.Info($"[Tank] SmartTaunt: Taunt position REJECTED — in hazard zone");
-                            }
-                            else
-                            {
-                                var moveAction = PlannedAction.Move(bestOption.Position, "Move for smart taunt");
-                                actions.Add(moveAction);
-                                remainingMP -= bestOption.MoveCost;
-                                Log.Planning.Info($"[Tank] SmartTaunt: Moving to taunt position (cost={bestOption.MoveCost:F1} MP)");
-                            }
+                            var moveAction = PlannedAction.Move(bestOption.Position, "Move for smart taunt");
+                            actions.Add(moveAction);
+                            remainingMP -= bestOption.MoveCost;
+                            Log.Planning.Info($"[Tank] SmartTaunt: Moving to taunt position (cost={bestOption.MoveCost:F1} MP)");
                         }
 
                         // 도발 액션 추가
@@ -881,6 +869,19 @@ namespace CompanionAI_v3.Planning.Plans
         }
 
         #region Tank-Specific Methods
+
+        /// <summary>The best taunt option castable from where the unit stands (options come best first), or null.</summary>
+        private static TauntScorer.TauntOption NoMoveTauntOption(List<TauntScorer.TauntOption> options)
+        {
+            foreach (var alt in options)
+            {
+                if (alt == null || alt.RequiresMove) continue;
+                Log.Planning.Info($"[Tank] SmartTaunt: Falling back to no-move option {alt.Ability.Name}");
+                return alt;
+            }
+            Log.Planning.Info("[Tank] SmartTaunt: no taunt castable from here - not taunting");
+            return null;
+        }
 
         /// <summary>
         /// ★ v3.8.86: movementStillNeeded 파라미터 추가

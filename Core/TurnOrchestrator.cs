@@ -1553,10 +1553,41 @@ namespace CompanionAI_v3.Core
         }
 
         /// <summary>Records the AP at the moment a cast is handed to the game (read by NotifyCastRefused).</summary>
-        public void NoteCastSent(BaseUnitEntity unit)
+        public void NoteCastSent(BaseUnitEntity unit, Kingmaker.Utility.TargetWrapper target)
         {
             if (unit == null || !_turnStates.TryGetValue(unit.UniqueId, out var turnState) || turnState == null) return;
             turnState.APWhenCastSent = CombatAPI.GetCurrentAP(unit);
+            var targetUnit = target?.Entity as BaseUnitEntity;
+            turnState.CastTargetWhenSent = targetUnit != null && targetUnit != unit ? targetUnit : null;
+            turnState.CastTargetHPWhenSent = turnState.CastTargetWhenSent?.Health?.HitPointsLeft ?? 0;
+        }
+
+        /// <summary>
+        /// The last cast sent shows signs it landed: AP went down, or its target (another unit) lost HP or died.
+        /// A refusal changes none of these. Free casts (bonus uses) only show it on the target.
+        /// </summary>
+        private static bool CastLanded(TurnState turnState, float apNow, out string evidence)
+        {
+            evidence = null;
+            if (turnState.APWhenCastSent >= 0f && turnState.APWhenCastSent - apNow > 0.01f)
+            {
+                evidence = $"AP {turnState.APWhenCastSent:F1} -> {apNow:F1}";
+                return true;
+            }
+            var target = turnState.CastTargetWhenSent;
+            if (target == null) return false;
+            if (target.LifeState.IsDead || !target.IsConscious)
+            {
+                evidence = $"{target.CharacterName} went down";
+                return true;
+            }
+            int hpNow = target.Health?.HitPointsLeft ?? 0;
+            if (hpNow < turnState.CastTargetHPWhenSent)
+            {
+                evidence = $"{target.CharacterName} HP {turnState.CastTargetHPWhenSent} -> {hpNow}";
+                return true;
+            }
+            return false;
         }
 
         /// <summary>
@@ -1572,14 +1603,15 @@ namespace CompanionAI_v3.Core
             float ap = CombatAPI.GetCurrentAP(unit);
             float cost = ability != null ? CombatAPI.GetEffectiveAPCost(ability) : 0f;
 
-            // AP went down since the cast was sent: it landed, and the command was cancelled afterwards (a cutscene
-            // cancels every command). Keep its record and carry on, or end the turn when nothing is left.
-            if (turnState.APWhenCastSent >= 0f && turnState.APWhenCastSent - ap > 0.01f)
+            // The cast landed and the command was cancelled afterwards (a cutscene cancels every command). Keep its
+            // record and carry on, or end the turn when nothing is left.
+            if (CastLanded(turnState, ap, out string evidence))
             {
                 bool canAct = ap > 0f || CombatAPI.GetCurrentMP(unit) > 0f;
                 Log.Engine.Info($"[Orchestrator] {unit.CharacterName}: {ability?.Name ?? "cast"} reported failed but landed " +
-                    $"(AP {turnState.APWhenCastSent:F1} -> {ap:F1}) - {(canAct ? "continuing" : "ending turn")}");
+                    $"({evidence}) - {(canAct ? "continuing" : "ending turn")}");
                 turnState.APWhenCastSent = -1f;
+                turnState.CastTargetWhenSent = null;
                 return canAct;
             }
 

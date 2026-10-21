@@ -48,11 +48,17 @@ namespace CompanionAI_v3.Planning.Planners
                 {
                     var ability = fact?.Data;
                     if (!IsBloodPhial(ability)) continue;
+                    int charges = ability.GetAvailableForCastCount();
+                    if (charges == 0)
+                    {
+                        Log.Planning.Info($"[{roleName}] Blood Phial empty ({remainingAP:F0} AP left)");
+                        return;
+                    }
                     var reasons = new List<string>();
                     foreach (var r in ability.GetUnavailabilityReasons()) reasons.Add(r.ToString());
                     if (ability.IsRestricted) reasons.Add("restricted");
                     Log.Planning.Info($"[{roleName}] Blood Phial not usable this turn ({remainingAP:F0} AP left): " +
-                        (reasons.Count > 0 ? string.Join(", ", reasons) : $"no reason from the game, {ability.GetAvailableForCastCount()} charges"));
+                        (reasons.Count > 0 ? string.Join(", ", reasons) : $"no reason from the game, {charges} charges"));
                     return;
                 }
             }

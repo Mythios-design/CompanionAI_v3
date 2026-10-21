@@ -294,7 +294,7 @@ namespace CompanionAI_v3.Execution
                 if (!CombatAPI.CanReachTargetFromPosition(ability, casterUnit.Position, targetUnit))
                 {
                     Log.Engine.Warn($"[Executor] ★ Execution-time reachability FAILED: {ability.Name} -> {targetUnit.CharacterName} from ({casterUnit.Position.x:F1}, {casterUnit.Position.z:F1})");
-                    return ExecutionResult.Failure($"Target unreachable from current position");
+                    return RejectTarget(ability, target, "Target unreachable from current position");
                 }
                 Log.Engine.Debug($"[Executor] Execution-time reachability OK: {ability.Name} -> {targetUnit.CharacterName}");
             }
@@ -311,7 +311,7 @@ namespace CompanionAI_v3.Execution
                 if (allies != null && !AoESafetyChecker.IsAoESafeForUnitTarget(ability, casterUnit, targetUnit, allies))
                 {
                     Log.Engine.Warn($"[Executor] Execution-time ally safety FAILED: {ability.Name} -> {targetUnit.CharacterName} from ({casterUnit.Position.x:F1}, {casterUnit.Position.z:F1}) — plan↔execute drift");
-                    return ExecutionResult.Failure($"AoE unsafe at execution position");
+                    return RejectTarget(ability, target, "AoE unsafe at execution position");
                 }
             }
 
@@ -338,14 +338,14 @@ namespace CompanionAI_v3.Execution
                     && enemiesInPattern == 0)
                 {
                     Log.Engine.Warn($"[Executor] Point AoE aborted: {ability.Name} at ({target.Point.x:F1}, {target.Point.z:F1}) no longer hits any enemy — plan↔execute drift");
-                    return ExecutionResult.Failure("No enemies in AoE pattern at target point");
+                    return RejectTarget(ability, target, "No enemies in AoE pattern at target point");
                 }
 
                 var allies = CombatAPI.GetAllies(casterUnit);
                 if (allies != null && !AoESafetyChecker.IsAoESafe(ability, casterUnit, target.Point, allies))
                 {
                     Log.Engine.Warn($"[Executor] Execution-time ally safety FAILED: {ability.Name} at point ({target.Point.x:F1}, {target.Point.z:F1}) from ({casterUnit.Position.x:F1}, {casterUnit.Position.z:F1}) — plan↔execute drift");
-                    return ExecutionResult.Failure($"AoE unsafe at execution position");
+                    return RejectTarget(ability, target, "AoE unsafe at execution position");
                 }
             }
 
@@ -357,7 +357,7 @@ namespace CompanionAI_v3.Execution
                 if (!CombatAPI.CanUseAbilityOn(ability, target, out reason))
                 {
                     Log.Engine.Warn($"[Executor] Ability blocked: {ability.Name} - {reason}");
-                    return ExecutionResult.Failure(reason);
+                    return RejectTarget(ability, target, reason);
                 }
             }
 
@@ -549,6 +549,17 @@ namespace CompanionAI_v3.Execution
         /// <summary>
         /// 타겟 이름 추출 (로깅용)
         /// </summary>
+        /// <summary>
+        /// Fails an action whose target didn't pass an execution-time check, and remembers the ability + target for
+        /// this turn (TurnState.MarkFailedTarget) so the replan picks something else.
+        /// </summary>
+        private static ExecutionResult RejectTarget(AbilityData ability, TargetWrapper target, string reason)
+        {
+            if (TurnOrchestrator.Instance?.GetCurrentTurnState() is TurnState turnState && turnState.Unit == ability?.Caster)
+                turnState.MarkFailedTarget(ability, target);
+            return ExecutionResult.Failure(reason);
+        }
+
         private string GetTargetName(TargetWrapper target)
         {
             if (target == null) return "null";

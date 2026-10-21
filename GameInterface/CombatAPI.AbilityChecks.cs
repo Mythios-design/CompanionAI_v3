@@ -21,6 +21,12 @@ namespace CompanionAI_v3.GameInterface
         /// <summary>
         /// 능력을 타겟에게 사용 가능한지 확인
         /// </summary>
+        /// <summary>The executor rejected this ability on this target earlier this turn, from the caster's current tile.</summary>
+        public static bool FailedAtExecutionThisTurn(AbilityData ability, TargetWrapper target)
+            => ability != null && target != null
+               && Core.TurnOrchestrator.Instance?.GetCurrentTurnState() is Core.TurnState turnState
+               && turnState.Unit == ability.Caster && turnState.IsFailedTarget(ability, target);
+
         public static bool CanUseAbilityOn(AbilityData ability, TargetWrapper target, out string reason)
         {
             reason = null;
@@ -28,6 +34,12 @@ namespace CompanionAI_v3.GameInterface
             if (ability == null || target == null)
             {
                 reason = "Null ability or target";
+                return false;
+            }
+
+            if (FailedAtExecutionThisTurn(ability, target))
+            {
+                reason = "Rejected at execution this turn";
                 return false;
             }
 

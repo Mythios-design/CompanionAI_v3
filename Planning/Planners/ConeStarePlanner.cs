@@ -112,7 +112,8 @@ namespace CompanionAI_v3.Planning.Planners
             var unit = situation.Unit;
             var enemies = situation.Enemies?.Where(e => e != null && e.IsConscious && !e.LifeState.IsDead).ToList();
             if (enemies == null || enemies.Count == 0) return null;
-            var allies = (situation.CombatantAllies ?? new List<BaseUnitEntity>())
+            // Every ally the cone could hit, familiars included (the executor's safety check counts them too)
+            var allies = (situation.Allies ?? new List<BaseUnitEntity>())
                 .Where(a => a != null && a != unit && a.IsConscious && !a.LifeState.IsDead).ToList();
 
             float range = CombatAPI.GetAbilityRangeInTiles(cone);
@@ -160,6 +161,8 @@ namespace CompanionAI_v3.Planning.Planners
                 foreach (var aim in enemies)
                 {
                     if (CombatAPI.MetersToTiles(Vector3.Distance(standPos, aim.Position)) > range) continue;
+                    // Rejected at execution from this tile earlier this turn
+                    if (stand == currentNode && CombatAPI.FailedAtExecutionThisTurn(cone, new TargetWrapper(aim))) continue;
                     var pattern = CombatAPI.GetAffectedNodes(cone, aim.Position, standPos);
                     if (pattern.IsEmpty) continue;
                     // The game's own targeting from the stand tile (line of sight, range): the pattern alone isn't enough

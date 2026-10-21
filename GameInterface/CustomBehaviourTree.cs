@@ -660,7 +660,7 @@ namespace CompanionAI_v3.GameInterface
                         context.AbilityTarget = result.Target;
                         // ★ v3.5.33: Stale 이동 데이터 클리어 - Charge 후 이동 버그 방지
                         context.FoundBetterPlace = default;
-                        TurnOrchestrator.Instance.NoteCastSent(unit);
+                        TurnOrchestrator.Instance.NoteCastSent(unit, result.Target);
                         Log.Engine.Info($"[CompanionAIDecisionNode] {unit.CharacterName}: Cast {result.Ability?.Name} -> {result.Target?.Entity}");
                         return Status.Success;  // → Selector가 TaskNodeCastAbility 실행
 
@@ -668,7 +668,7 @@ namespace CompanionAI_v3.GameInterface
                         // ★ 이동 → FoundBetterPlace 설정
                         if (result.Destination.HasValue)
                         {
-                            if (SetupMovement(unit, result.Destination.Value, context))
+                            if (SetupMovement(unit, result.Destination.Value, context, out bool alreadyThere))
                             {
                                 // ★ v3.8.42: 이동 중 카메라 추적
                                 // 게임은 UnitMoveToProper에 대한 카메라 핸들러가 없어서
@@ -685,6 +685,13 @@ namespace CompanionAI_v3.GameInterface
 
                                 Log.Engine.Info($"[CompanionAIDecisionNode] {unit.CharacterName}: Move to {result.Destination.Value}");
                                 return Status.Success;  // → Selector가 Movement 노드 실행
+                            }
+                            else if (alreadyThere)
+                            {
+                                // The best standable tile toward the destination is the one she stands on: nothing to
+                                // move, not a failure. The plan carries on with its next action.
+                                Log.Engine.Info($"[CompanionAIDecisionNode] {unit.CharacterName}: already on the best tile toward {result.Destination.Value} - move skipped");
+                                return Status.Running;
                             }
                             else
                             {
@@ -737,8 +744,9 @@ namespace CompanionAI_v3.GameInterface
         /// ★ 이동 설정 - context.FoundBetterPlace 설정
         /// TaskNodeSetupMoveCommand.ToBetterPosition()이 이 값을 읽어서 경로 생성
         /// </summary>
-        private bool SetupMovement(BaseUnitEntity unit, Vector3 destination, DecisionContext context)
+        private bool SetupMovement(BaseUnitEntity unit, Vector3 destination, DecisionContext context, out bool alreadyThere)
         {
+            alreadyThere = false;
             // ★ v3.5.33: 기존 stale 데이터 클리어
             context.FoundBetterPlace = default;
 
@@ -889,7 +897,7 @@ namespace CompanionAI_v3.GameInterface
                 var currentNode = unit.Position.GetNearestNodeXZ();
                 if (bestCell.Node == currentNode)
                 {
-                    Log.Engine.Debug($"[CompanionAIDecisionNode] Already at destination");
+                    alreadyThere = true;
                     return false;
                 }
 

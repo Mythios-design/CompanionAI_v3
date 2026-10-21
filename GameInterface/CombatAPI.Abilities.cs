@@ -475,6 +475,7 @@ namespace CompanionAI_v3.GameInterface
                     if (!isAttack) continue;
                     // Markers (e.g. Blood Oath) mark a target, they are not attacks: their own planner decides when to use them
                     if (Data.AbilityDatabase.IsMarker(ability)) continue;
+                    if (Planning.Planners.AbilityPolicy.IsHeldForOwnPlanner(ability)) continue;
 
                     // ★ v3.8.86: GetEffectiveAPCost 사용 - bonus usage 공격도 감지
                     float cost = GetEffectiveAPCost(ability);
@@ -518,6 +519,7 @@ namespace CompanionAI_v3.GameInterface
                     if (!isAttack) continue;
                     // Markers (e.g. Blood Oath) mark a target, they are not attacks: their own planner decides when to use them
                     if (Data.AbilityDatabase.IsMarker(ability)) continue;
+                    if (Planning.Planners.AbilityPolicy.IsHeldForOwnPlanner(ability)) continue;
 
                     // F4/F14: 0-AP 자해 능력은 HP 임계값 아래에서 제외 (관통 원인 1 — API 내재화).
                     if (IsSelfDamageBlockedAtHP(ability, hpPercent)) continue;
