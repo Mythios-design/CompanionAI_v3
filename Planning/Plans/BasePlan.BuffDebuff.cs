@@ -61,6 +61,14 @@ namespace CompanionAI_v3.Planning.Plans
         protected PlannedAction PlanApproachStance(Situation situation, bool preferOffensive)
             => BuffPlanner.PlanApproachStance(situation, preferOffensive, RoleName);
 
+        /// <summary>Adds the stance, preceded by Reckless Rush when it takes Versatility to the stance's 4-stack bonus.</summary>
+        protected void AddApproachStance(List<PlannedAction> actions, PlannedAction stance, Situation situation, ref float remainingAP)
+        {
+            var rush = VersatilityPlanner.PlanRush(situation, stance, ref remainingAP, RoleName);
+            if (rush != null) actions.Add(rush);
+            if (stance != null) actions.Add(stance);
+        }
+
         protected PlannedAction PlanTaunt(Situation situation, ref float remainingAP)
             => BuffPlanner.PlanTaunt(situation, ref remainingAP, RoleName);
 

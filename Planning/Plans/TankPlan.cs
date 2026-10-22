@@ -76,7 +76,7 @@ namespace CompanionAI_v3.Planning.Plans
 
             // ★ v3.40.0: Phase 1.8 — Cautious/Confident Approach 스탠스 선택 (Tank = 방어 우선)
             var approachStance = PlanApproachStance(situation, preferOffensive: false);
-            if (approachStance != null) actions.Add(approachStance);
+            AddApproachStance(actions, approachStance, situation, ref remainingAP);
 
             // Phase 2: 방어 자세 (Confidence 기반 결정)
             // ★ v3.11.2: Curve 기반 연속 판단 (기존 confidence < 0.5f 이진 임계값 대체)

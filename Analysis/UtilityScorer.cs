@@ -936,24 +936,13 @@ namespace CompanionAI_v3.Analysis
                 }
             }
 
-            // ★ v3.28.0: Arch-Militant Versatility — 다른 유형 공격 선호
-            // 이전 공격과 다른 카테고리 공격에 보너스 → Versatility 스택 축적 유도
-            var turnState = Core.TurnOrchestrator.Instance.GetCurrentTurnState();
-            if (turnState != null && turnState.LastAttackCategory != Data.AttackCategory.Normal
-                && turnState.HasAttackedThisTurn)
+            // Arch-Militant: an attack of another kind than the last one adds a Versatility stack (game state)
+            if (Versatility.EarnsStack(attack, situation.Unit))
             {
-                var archetype = CombatAPI.DetectArchetype(situation.Unit);
-                if (archetype == CombatAPI.UnitArchetype.ArchMilitant)
-                {
-                    var currentCategory = CombatAPI.GetAbilityTypeInfo(attack).Category;
-                    if (currentCategory != turnState.LastAttackCategory)
-                    {
-                        score += SC.VersatilityDiversityBonus;
-                        if (Main.IsDebugEnabled)
-                            Log.Analysis.Debug($"[UtilityScorer] {attack.Name}: +{SC.VersatilityDiversityBonus:F0} Versatility diversity " +
-                                $"(last={turnState.LastAttackCategory}, current={currentCategory})");
-                    }
-                }
+                score += SC.VersatilityDiversityBonus;
+                if (Main.IsDebugEnabled)
+                    Log.Analysis.Debug($"[UtilityScorer] {attack.Name}: +{SC.VersatilityDiversityBonus:F0} earns a Versatility stack " +
+                        $"(last={Versatility.LastKind(situation.Unit)?.ToString() ?? "none"}, this={string.Join("/", Versatility.Kinds(attack))})");
             }
 
             // ★ LLM-as-Scorer: AoE 공격 가중치 적용

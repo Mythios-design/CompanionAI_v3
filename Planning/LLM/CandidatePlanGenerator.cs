@@ -284,7 +284,6 @@ namespace CompanionAI_v3.Planning.LLM
             dest.HasPerformedFirstAction = source.HasPerformedFirstAction;
             dest.MoveCount = source.MoveCount;
             dest.WeaponSwitchCount = source.WeaponSwitchCount;
-            dest.LastAttackCategory = source.LastAttackCategory;
         }
 
         /// <summary>후보 리스트에서 태그 목록 추출 (로깅용)</summary>

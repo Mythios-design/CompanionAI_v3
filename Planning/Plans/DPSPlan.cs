@@ -233,7 +233,7 @@ namespace CompanionAI_v3.Planning.Plans
 
             // ★ v3.40.0: Phase 1.8 — Cautious/Confident Approach 스탠스 선택
             var approachStance = PlanApproachStance(situation, preferOffensive: true);
-            if (approachStance != null) actions.Add(approachStance);
+            AddApproachStance(actions, approachStance, situation, ref remainingAP);
 
             // Phase 2: Heroic Act (Momentum 175+)
             var heroicAction = PlanHeroicAct(situation, ref remainingAP);

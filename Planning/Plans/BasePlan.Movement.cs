@@ -597,8 +597,7 @@ namespace CompanionAI_v3.Planning.Plans
         {
             bool preferOffensive = ctx.Role == AIRole.DPS || ctx.Role == AIRole.Overseer;
             var approachStance = PlanApproachStance(ctx.Situation, preferOffensive: preferOffensive);
-            if (approachStance != null)
-                ctx.Actions.Add(approachStance);
+            AddApproachStance(ctx.Actions, approachStance, ctx.Situation, ref ctx.RemainingAP);
         }
 
         #endregion

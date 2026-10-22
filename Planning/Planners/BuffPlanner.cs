@@ -449,7 +449,17 @@ namespace CompanionAI_v3.Planning.Planners
 
             // ★ 상황 판단: Cautious vs Confident
             bool wantCautious;
-            if (situation.IsHPLow)
+            // Arch-Militant: Cautious Approach at 4+ Versatility stacks cleanses bleeding, burning and toxin and
+            // grants immunity until the end of combat
+            bool cleanse = cautiousAbility != null && Data.SpecialAbilityHandler.HasDoT(situation.Unit)
+                           && !VersatilityPlanner.HasCautiousImmunity(situation.Unit)
+                           && VersatilityPlanner.CanReachThreshold(situation.Unit);
+            if (cleanse)
+            {
+                Log.Planning.Info($"[{roleName}] Cautious Approach: damage over time on {situation.Unit.CharacterName}, 4 Versatility stacks cleanse it");
+                wantCautious = true;
+            }
+            else if (situation.IsHPLow)
             {
                 // HP 50% 미만 → 방어 우선
                 wantCautious = true;

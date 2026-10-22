@@ -78,7 +78,7 @@ namespace CompanionAI_v3.Planning.Plans
 
             // ★ v3.40.0: Phase 1.8 — Cautious/Confident Approach 스탠스 선택 (Support = 방어 우선)
             var approachStance = PlanApproachStance(situation, preferOffensive: false);
-            if (approachStance != null) actions.Add(approachStance);
+            AddApproachStance(actions, approachStance, situation, ref remainingAP);
 
             // Phase 2: 아군 힐 (사용자 설정 + Confidence 보정)
             // ★ v3.2.15: TeamBlackboard 기반 힐 대상 선택 (팀 전체 최적화)

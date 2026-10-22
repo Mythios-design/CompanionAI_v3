@@ -117,9 +117,6 @@ namespace CompanionAI_v3.Core
         /// <summary>★ v3.9.72: 이번 턴 무기 세트 전환 횟수</summary>
         public int WeaponSwitchCount { get; set; }
 
-        /// <summary>★ v3.28.0: 마지막 공격 카테고리 (Arch-Militant Versatility 스택 축적용)</summary>
-        public Data.AttackCategory LastAttackCategory { get; set; } = Data.AttackCategory.Normal;
-
         /// <summary>★ v3.74.2: 이동 전 위치 (진동 방지 — 되돌아가는 이동 패널티)</summary>
         public Vector3? LastMoveOrigin { get; set; }
 
@@ -381,12 +378,6 @@ namespace CompanionAI_v3.Core
                     case ActionType.Attack:
                         HasAttackedThisTurn = true;
                         HasPerformedFirstAction = true;
-                        // ★ v3.28.0: Versatility용 공격 카테고리 추적
-                        if (action.Ability != null)
-                        {
-                            var typeInfo = GameInterface.CombatAPI.GetAbilityTypeInfo(action.Ability);
-                            LastAttackCategory = typeInfo.Category;
-                        }
                         break;
                     case ActionType.Buff:
                         HasBuffedThisTurn = true;

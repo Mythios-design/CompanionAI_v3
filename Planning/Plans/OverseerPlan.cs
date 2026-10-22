@@ -78,7 +78,7 @@ namespace CompanionAI_v3.Planning.Plans
 
             // ★ v3.40.0: Phase 1.8 — Cautious/Confident Approach 스탠스 선택 (Overseer = 공격 우선)
             var approachStance = PlanApproachStance(situation, preferOffensive: true);
-            if (approachStance != null) actions.Add(approachStance);
+            AddApproachStance(actions, approachStance, situation, ref remainingAP);
 
             // ══════════════════════════════════════════════════════════════
             // Phase 2: HeroicAct/Overcharge FIRST ★핵심★
