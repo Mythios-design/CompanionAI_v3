@@ -80,8 +80,8 @@ namespace CompanionAI_v3.Data
             return best;
         }
 
-        // The set each character started the combat with: their main loadout, which they return to when the
-        // reason for switching (an adjacent enemy) has gone.
+        // Each character's main loadout: the first weapon set when it holds a weapon, otherwise the set held when the
+        // combat started. Every normal turn starts on it (ShouldStartOnPrimary); the other set is the fallback.
         private static readonly Dictionary<string, int> _homeSets = new Dictionary<string, int>();
 
         public static int GetHomeSet(BaseUnitEntity unit)
@@ -89,10 +89,31 @@ namespace CompanionAI_v3.Data
             if (unit == null) return 0;
             if (!_homeSets.TryGetValue(unit.UniqueId, out int set))
             {
-                set = unit.Body?.CurrentHandEquipmentSetIndex ?? 0;
+                set = SetHasWeapon(unit, 0) ? 0 : unit.Body?.CurrentHandEquipmentSetIndex ?? 0;
                 _homeSets[unit.UniqueId] = set;
             }
             return set;
+        }
+
+        /// <summary>
+        /// At the start of a normal turn, a unit holding its second set goes back to the first, so the turn is
+        /// planned with the main weapons and the second set stays the fallback. Only for units whose weapon set
+        /// rotation setting is on (the AI never switches the others), whose first set holds a weapon, and who can
+        /// switch at all (mechadendrites block it).
+        /// </summary>
+        public static bool ShouldStartOnPrimary(BaseUnitEntity unit)
+        {
+            if (unit?.Body == null || unit.Body.CurrentHandEquipmentSetIndex == 0) return false;
+            var settings = ModSettings.Instance?.GetOrCreateSettings(unit.UniqueId, unit.CharacterName);
+            if (settings?.EnableWeaponSetRotation != true) return false;
+            if (unit.HasMechadendrites()) return false;
+            return SetHasWeapon(unit, 0);
+        }
+
+        private static bool SetHasWeapon(BaseUnitEntity unit, int index)
+        {
+            var sets = unit?.Body?.HandsEquipmentSets;
+            return sets != null && sets.Count > index && sets[index]?.PrimaryHand?.HasItem == true;
         }
 
         public static void ResetHomeSets() => _homeSets.Clear();

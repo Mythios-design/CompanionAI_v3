@@ -140,6 +140,17 @@ namespace CompanionAI_v3.Core
                 if (waitResult != null)
                     return waitResult;
 
+                // A normal turn starts on the primary weapon set; the planner may switch to the other set as a fallback
+                if (_startOnPrimarySet.Remove(unitId) && Data.WeaponSetAnalyzer.ShouldStartOnPrimary(unit))
+                {
+                    CombatAPI.SwitchWeaponSet(unit, 0);
+                    turnState.PendingWeaponSwitchTarget = 0;
+                    CombatCache.ClearAll();
+                    MovementAPI.ClearEvaluationCache();
+                    Log.Engine.Info($"[Orchestrator] {unitName}: turn starts on the primary weapon set (was on set {unit.Body.CurrentHandEquipmentSetIndex})");
+                    return ExecutionResult.Waiting("Switching to the primary weapon set");
+                }
+
                 // ★ v3.9.92: 비동기 무기 전환 완료 대기
                 // GameCommandQueue.SwitchHandEquipment는 비동기 — 처리 완료 전 재분석하면 stale 데이터
                 // WeaponSetChangedTrigger(Versatility) 보너스도 이 시점에 반영되어야 함
@@ -1869,6 +1880,9 @@ namespace CompanionAI_v3.Core
         /// ★ v3.0.76: 턴 시작 시 호출 (TurnEventHandler에서)
         /// 게임의 ITurnStartHandler 이벤트로 호출됨
         /// </summary>
+        /// <summary>Units whose normal turn just started: checked once for the primary weapon set (bonus turns aren't added).</summary>
+        private readonly HashSet<string> _startOnPrimarySet = new HashSet<string>();
+
         public void OnTurnStart(BaseUnitEntity unit)
         {
             if (unit == null) return;
@@ -1877,6 +1891,7 @@ namespace CompanionAI_v3.Core
 
             // 이전 턴 상태 정리
             _turnStates.Remove(unitId);
+            _startOnPrimarySet.Add(unitId);
 
             // 능력 사용 추적 초기화
             AbilityUsageTracker.ClearForUnit(unitId);
