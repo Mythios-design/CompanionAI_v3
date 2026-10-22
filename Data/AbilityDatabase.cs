@@ -199,7 +199,9 @@ namespace CompanionAI_v3.Data
             // 아님 — AbilityResourceWounds 없음, 대신 +3 MP 회복(RestoreActionPoints) + 5뎀 자체 출혈 DOT.
             // 기존 SelfDamage/hp60 등록은 오류(HP코스트 오인). 자체 출혈이 있으므로 hp40 게이트는 유지하되
             // PreAttackBuff 로 재분류(60%↓ 사장 해소). 라벨도 실명으로 정정.
-            { "858e841542554025bc3ecdb6336b87ea", new AbilityInfo("858e841542554025bc3ecdb6336b87ea", "Ensanguinate", AbilityTiming.PreAttackBuff, hpThreshold: 40f, flags: AbilityFlags.SelfTargetOnly) },
+            // Exsanguination: bleeding on itself for +dodge and +3 MP until the bleeding ends. A movement and defence buff,
+            // cast at the start of a turn while it isn't on, above 60% wounds (the bleeding lasts)
+            { "858e841542554025bc3ecdb6336b87ea", new AbilityInfo("858e841542554025bc3ecdb6336b87ea", "Ensanguinate", AbilityTiming.PreCombatBuff, hpThreshold: 60f, flags: AbilityFlags.SelfTargetOnly) },
             { "566b140329b3441aafa971d729124947", new AbilityInfo("566b140329b3441aafa971d729124947", "RecklessDecision", AbilityTiming.SelfDamage, hpThreshold: 80f) },
             // ★ v3.0.43: HyperMetabolism는 아군에게 추가 턴을 주는 버프 (SelfDamage → PreCombatBuff)
             // 아군 타겟 + 단일 사용, HP 임계값은 아군에게 적용되지 않으므로 제거

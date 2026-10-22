@@ -15,6 +15,16 @@ namespace CompanionAI_v3.Planning.Planners
         // Bounty Hunter
         private const string RAID = "1394e5c9a6a347db841d961a87f375f4";  // JoinThePack_Hunter_Ability
 
+        // Executioner
+        private const string PAIN_RESONANCE = "fd305e7458de42b5a28fa8b80437cf03";     // Executioner_Aggravate_Ability
+        private const string GIFT_OF_TORMENT = "401f97698d794e058adf5bee28aa2f1e";    // Executioner_PainAnticipation_Ability
+        private const string WHERE_IT_HURTS = "cfdb72a6653c49ffa792fa99abfed128";     // Executioner_Keystone_Active_Ability
+        private const string TERRIFYING_STRIKE = "d0c7cc80880242b1ba1ded8192c53ea4";
+        private const string MERCILESS_VERDICT = "914b9182e9634dd1a3139c16485d091f";  // Executioner_DebiliatingShot_Ability
+        private const float PainResonanceRange = 4f;
+        private const int PainResonanceMinEnemies = 2;
+        private const int GiftOfTormentMinCreatures = 3;
+
         /// <summary>Why the ability isn't worth casting now, or null when it is (or has no condition here).</summary>
         public static string WhyHold(AbilityData ability, Situation situation)
         {
@@ -33,6 +43,26 @@ namespace CompanionAI_v3.Planning.Planners
                 }
                 case TacticianPlanner.FERVOUR:
                     return TacticianPlanner.WhyHoldFervour(situation);
+                case PAIN_RESONANCE:
+                {
+                    int n = CountDoT(situation.Enemies, situation.Unit, PainResonanceRange);
+                    return n >= PainResonanceMinEnemies ? null : $"{n} enemies with damage over time within {PainResonanceRange:F0} tiles, needs {PainResonanceMinEnemies}";
+                }
+                case GIFT_OF_TORMENT:
+                {
+                    var all = new List<BaseUnitEntity>(situation.Enemies ?? new List<BaseUnitEntity>());
+                    all.AddRange(situation.Allies ?? new List<BaseUnitEntity>());
+                    int n = CountDoT(all, null, 0f);
+                    return n >= GiftOfTormentMinCreatures ? null : $"{n} creatures with damage over time, needs {GiftOfTormentMinCreatures}";
+                }
+                case WHERE_IT_HURTS:
+                    return CountDoT(situation.HittableEnemies, null, 0f) > 0 ? null : "no enemy in reach has damage over time";
+                case TERRIFYING_STRIKE:
+                    return IsMeleeAttack(situation.PrimaryAttack) && situation.HasMeleeHittableEnemies
+                        ? null : "the next attack isn't a melee attack";
+                case MERCILESS_VERDICT:
+                    return IsRangedOrPsychic(situation.PrimaryAttack) && situation.HittableEnemies?.Count > 0
+                        ? null : "the next attack isn't ranged or psychic";
                 default:
                     return null;
             }
@@ -50,6 +80,24 @@ namespace CompanionAI_v3.Planning.Planners
             }
             return false;
         }
+
+        /// <summary>Living creatures with bleeding, burning or toxin; within range of the unit when one is given.</summary>
+        private static int CountDoT(List<BaseUnitEntity> units, BaseUnitEntity from, float range)
+        {
+            int n = 0;
+            foreach (var u in units ?? new List<BaseUnitEntity>())
+            {
+                if (u == null || u.LifeState.IsDead || !Data.SpecialAbilityHandler.HasDoT(u)) continue;
+                if (from != null && CombatAPI.GetDistanceInTiles(from, u) > range) continue;
+                n++;
+            }
+            return n;
+        }
+
+        private static bool IsMeleeAttack(AbilityData a) => a?.Weapon != null && a.Weapon.Blueprint.IsMelee;
+
+        private static bool IsRangedOrPsychic(AbilityData a)
+            => a != null && ((a.Weapon != null && !a.Weapon.Blueprint.IsMelee) || Data.AbilityDatabase.IsPsychic(a));
 
         /// <summary>Conscious allies other than the unit itself, familiars excluded.</summary>
         internal static List<BaseUnitEntity> OtherAllies(Situation situation)
