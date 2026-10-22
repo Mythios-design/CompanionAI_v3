@@ -18,7 +18,9 @@ Lines marked **Decision** record your answers from 2026-10-17. Lines marked **To
 5. [Soldier (Argenta)](#soldier-argenta)
 6. [Warrior (Abelard)](#warrior-abelard)
 7. [Psyker powers (Idira)](#psyker-powers-idira)
-8. [Decisions](#decisions)
+8. [Advanced archetypes](#advanced-archetypes)
+9. [Space combat (Patient Fortune)](#space-combat-patient-fortune)
+10. [Decisions](#decisions)
 
 ---
 
@@ -70,6 +72,11 @@ A granted turn is wasted on an ally who can't act with it. `TurnGrantPolicy` dec
 - **Cover:** own cover counts double in tile choice. With MP left at the end of a plan, a ranged character who isn't engaged steps to the nearest tile with better cover, as long as it draws no attacks of opportunity, enters no hazard, isn't in reach of more melee enemies, and keeps as many enemies in weapon range (`CoverPositioning.cs`). Tanks stay visible.
 - **Melee characters** go where they hit hardest. For Bladedancers that means next to as many enemies as possible and no allies (see below).
 - **Line of sight:** a ranged character with no visible enemy heads for a tile that can see one.
+
+### 6. Weapon sets
+
+- **Every normal turn starts on the first weapon set** (the main loadout), for characters with weapon set rotation on. A unit holding its second set switches back before the turn is planned; the switch is free and doesn't count toward the per-turn switch limit. Bonus turns keep the set in hand.
+- **The second set is the fallback:** the planner switches to it only when the first set can't attack well (no target from here or after moving, or engaged next to enemies with a weapon that can't fire there).
 
 ---
 
@@ -272,6 +279,48 @@ A granted turn is wasted on an ally who can't act with it. `TurnGrantPolicy` dec
 | Lightning Arc (staff) | Chain attack; same ally chain rule as the Arc Rifle. |
 
 > **Decision:** Forewarning goes on the tank and melee allies first, preferring whoever is most threatened, and only once per ally per combat. **To build.**
+
+## Advanced archetypes
+
+Conditions live in `ArchetypeConditions.cs`: while an ability isn't worth casting, `AbilityPolicy` holds it out of every pick and logs "<ability> held: <reason>".
+
+### Arch-Militant: Versatility
+
+- **Read from the game** (`Versatility.cs`): the stack count and the marker for the last attack kind, kept across turns. Six kinds, as the keystone's triggers define them: area, burst and single, each melee or ranged. Grenades count as area shots and psychic attacks as the matching shot; using items or other powers counts for nothing.
+- **Attack choice:** an attack that earns a stack (a different kind from the last one) gets a bonus.
+- **4-stack threshold:** while a stance is on, reaching 4 stacks gives Confident Approach maximum damage, or Cautious Approach the cleanse and immunity, for the rest of the combat. Reckless Rush (+3 temporary stacks, with at least one) is cast right before the stance, or alone with the stance already on, when that takes 1 to 3 stacks to 4 and the bonus is missing (`VersatilityPlanner.cs`). It keeps 1 AP for an attack.
+- **Stance choice:** Cautious when the unit has damage over time and can reach 4 stacks (the cleanse), or when hurt; otherwise Confident for attackers. A stance is never cast again while it's on, since that turns it off.
+
+### Bounty Hunter
+
+- **Hot on the Trail** ends the turn, so it's never cast before an attack. It goes last in the plan, only with AP left for the extra turn, on the lowest-wounds enemy under half wounds that the plan doesn't attack and an ally can reach next turn (`AllyKillMarkPlanner.cs`).
+- **Raid** only while a living prey is within reach of an ally.
+- **Cull the Bold** right before an attack.
+- **Ensnare the Prey** aimed at the enemy is fine: the trap fires when a unit moves inside it.
+- **Expert Finesse** is fired by the game after a kill; it's never on the ability bar.
+
+### Executioner
+
+| Ability | Cast only when |
+|---|---|
+| Pain Resonance | 2+ enemies within 4 tiles have bleeding, burning or toxin |
+| Gift of Torment | 3+ creatures in the fight have damage over time |
+| Where It Hurts | an enemy in reach has damage over time |
+| Terrifying Strike | the next attack is melee with a target in reach |
+| Merciless Verdict | the next attack is ranged or psychic |
+| Exsanguination | start of turn, not already on, above 60% wounds (bleeding for +dodge and +3 MP) |
+
+### Master Tactician
+
+- **One stack-spender per turn**, once the tactical advantage stacks are worth it (`TacticianPlanner.cs`), in this order: Inspire at 10+, Press the Advantage at 5+ (before its own attack), Strongpoint at 4+, Linchpin at 5+.
+- **Targets:** Inspire and Linchpin go to the heroic-act carry, else the ally with the most damage this turn; Strongpoint to the ally most enemies can reach next turn.
+- **Fervour** only at half wounds or more, and not on a turn whose order goes to an ally (it makes the orders self-only).
+- **Assign Objective** with leftover AP at the end of the plan, on an enemy an ally can finish (same target search as Hot on the Trail).
+
+### Grand Strategist
+
+- Zones and stratagems: `StrategistZonePlanner.cs` (not reviewed in this pass).
+- **Mobility Zone** (a 1-cell step without attacks of opportunity) is held: no AI rule handles leaving melee yet.
 
 ## Space combat (Patient Fortune)
 
