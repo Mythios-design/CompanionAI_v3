@@ -269,6 +269,9 @@ namespace CompanionAI_v3.Analysis
         /// <summary>Raining Blood, held out of the buff picks: put before a single-target melee attack (RainingBloodPlanner).</summary>
         public AbilityData HeldRainingBlood { get; set; }
 
+        /// <summary>Hot on the Trail ends the turn: held out of the marks, cast last on an enemy an ally can finish (AllyKillMarkPlanner).</summary>
+        public AbilityData HeldHotOnTheTrail { get; set; }
+
         /// <summary>Tactical Knowledge, held out of every list: placed after the Operative's setup and shot (TacticalKnowledgePlanner).</summary>
         public AbilityData HeldTacticalKnowledge { get; set; }
 
@@ -530,6 +533,7 @@ namespace CompanionAI_v3.Analysis
             LastResortBuffs.Clear();
             HeldBloodPhial = null;
             HeldRainingBlood = null;
+            HeldHotOnTheTrail = null;
             HeldTacticalKnowledge = null;
             HeldAcrobaticArtistry = null;
             HeldWordOfTheEmperor = null;

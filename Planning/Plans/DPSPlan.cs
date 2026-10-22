@@ -1363,6 +1363,8 @@ namespace CompanionAI_v3.Planning.Plans
 
             // Blood Phial: lowest-priority AP spend, after everything else
             // Word of the Emperor: group buff with leftover AP, never filler
+            // Hot on the Trail ends the turn and keeps the AP left for its extra turn, so it goes before the last AP spends
+            Planners.AllyKillMarkPlanner.AppendHotOnTheTrail(actions, situation, ref remainingAP, RoleName);
             Planners.WordOfTheEmperorPlanner.Append(actions, situation, ref remainingAP, RoleName);
 
             Planners.BloodPhialPlanner.Append(actions, situation, ref remainingAP, RoleName);

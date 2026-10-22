@@ -31,7 +31,8 @@ namespace CompanionAI_v3.Planning.Planners
             => BloodPhialPlanner.IsBloodPhial(a) || TacticalKnowledgePlanner.IsTacticalKnowledge(a)
                || AcrobaticArtistryPlanner.IsAcrobaticArtistry(a) || WordOfTheEmperorPlanner.IsWordOfTheEmperor(a)
                || RainingBloodPlanner.IsRainingBlood(a)
-               || SoldierBuffPlanner.IsRapidFire(a) || SoldierBuffPlanner.IsConcentratedFire(a);
+               || SoldierBuffPlanner.IsRapidFire(a) || SoldierBuffPlanner.IsConcentratedFire(a)
+               || AllyKillMarkPlanner.IsHotOnTheTrail(a);
 
         public static void Apply(Situation situation)
         {
@@ -72,6 +73,14 @@ namespace CompanionAI_v3.Planning.Planners
                 {
                     if (!RainingBloodPlanner.IsRainingBlood(a)) return false;
                     situation.HeldRainingBlood = situation.HeldRainingBlood ?? a;
+                    return true;
+                });
+
+                // Hot on the Trail ends the turn: AllyKillMarkPlanner casts it as the plan's last action
+                RemoveWhere(situation, a =>
+                {
+                    if (!AllyKillMarkPlanner.IsHotOnTheTrail(a)) return false;
+                    situation.HeldHotOnTheTrail = situation.HeldHotOnTheTrail ?? a;
                     return true;
                 });
 
