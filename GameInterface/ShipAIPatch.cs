@@ -21,13 +21,15 @@ namespace CompanionAI_v3.GameInterface
     /// The player's ship in space combat, run by the game's own starship AI (Ship Combat AI setting).
     /// The player ship has no BlueprintStarshipBrain, and the game's scoring returns 0 for every path without one,
     /// so the ship would do nothing. These patches stand in for the brain, only for a delegated player ship
-    /// without one (TurnOrchestrator.IsShipAIDelegated); enemy ships and wingmen keep their own brains.
+    /// without one (UsesStandInBrain); enemy ships and wingmen keep their own brains.
     ///  1. Destination: best at 3 tiles from the nearest capital ship (the brain default).
-    ///  2. Trajectory: destination score plus, for each ability, its best value anywhere on the path; paths
-    ///     through a tile the ship can't stop on score 0, and ending in a meteor stream costs 100. Both match
-    ///     what the game does with a brain.
-    ///  3. Ability value per target (ShipTargetValue): the game uses it both to pick the path and, when
-    ///     firing, to pick the first enemy with the best value.
+    ///  2. Trajectory: destination score plus, for each ability, its best value anywhere on the path. A path
+    ///     through a tile the ship can't stop on scores 0 and ending in a meteor stream costs 100, as with a
+    ///     brain. Ending in front of an enemy capital ship that can reach us costs EnemyBowPenalty (EnemyFlankPenalty
+    ///     off its bow quarter), the game's "stay behind" brain option sized against shot values.
+    ///  3. Ability value per target (ShipTargetValue). The game uses it to pick the path and, when firing, shoots
+    ///     the first enemy whose value matches the planned one, so values are frozen for the ship's turn.
+    /// The ship's post abilities and ultimates are cast by ShipPostPlanner (ShipPostPatch).
     /// </summary>
     [HarmonyPatch]
     public static class ShipAIPatch
@@ -35,6 +37,29 @@ namespace CompanionAI_v3.GameInterface
         /// <summary>The game's default BlueprintStarshipBrain.FearOfMeteors, used by every brain in the game.</summary>
         private const float MeteorPenalty = 100f;
         private const float DesiredDistance = 3f;
+        /// <summary>Ending within 90 degrees of an enemy capital ship's bow, where it needs no turn to fire.</summary>
+        private const float EnemyBowPenalty = 3f;
+        /// <summary>Ending 90 to 135 degrees off its bow.</summary>
+        private const float EnemyFlankPenalty = 1f;
+
+        private const string SHIELD_PULSE = "46c2d6cde7eb46c2a0b464764d670b72";       // MA_ShieldGen_ShieldsPulse (spends 25% of our shields)
+        private const string BOARDING_TEAM = "738ca17f7a52449c9f9fc16bb59319d1";      // UA_Bridge_BoardingTeam_Ability
+        private const string EMPYREAN_STORM = "f9b7259637d54f04bfa36753ce00a2b8";     // UA_Astropatic_EmpyreanStorm_Ability
+        private const string AELDARI_HOLOFIELD = "4c893bc4be2e434b8b77c3c45fa2f308";  // Shield Pulse strips these
+        private const string DRUKHARI_SHADOWFIELD = "3911cbfc8a554c7aa4f9ad417c280073";
+        private const string NECRON_FALLING_APART = "175d2f02c141491baa8d38105ce62ee2";
+
+        /// <summary>Ability values for this ship turn, key ability GUID | target id.</summary>
+        private static readonly Dictionary<string, int> _turnValues = new Dictionary<string, int>();
+        /// <summary>Enemy reach (weapon range + movement) for this ship turn, key enemy id.</summary>
+        private static readonly Dictionary<string, int> _enemyReach = new Dictionary<string, int>();
+
+        /// <summary>Called at the start of the delegated ship's turn.</summary>
+        public static void ResetTurn()
+        {
+            _turnValues.Clear();
+            _enemyReach.Clear();
+        }
 
         [HarmonyPatch(typeof(TaskNodeFindBestTrajectory), "CalculateDestinationScore")]
         [HarmonyPrefix]
@@ -60,10 +85,16 @@ namespace CompanionAI_v3.GameInterface
         public static void GetAbilityValue_Postfix(PartUnitBrain __instance, AbilityData ability, MechanicEntity target, ref int __result)
         {
             if (!UsesStandInBrain(__instance?.Owner as BaseUnitEntity)) return;
-            __result = ShipTargetValue(ability, target);
+            string key = ShipCombatInfo.Guid(ability) + "|" + (target?.UniqueId ?? "none");
+            if (!_turnValues.TryGetValue(key, out int value))
+            {
+                value = ShipTargetValue(ability, target);
+                _turnValues[key] = value;
+            }
+            __result = value;
         }
 
-        private static bool UsesStandInBrain(BaseUnitEntity unit)
+        public static bool UsesStandInBrain(BaseUnitEntity unit)
             => unit != null && !(unit.Brain?.Blueprint is BlueprintStarshipBrain) && TurnOrchestrator.IsShipAIDelegated(unit);
 
         private static float TrajectoryScore(SpaceCombatDecisionContext context, ShipPath.DirectionalPathNode targetNode)
@@ -83,7 +114,8 @@ namespace CompanionAI_v3.GameInterface
 
             int total = 0;
             foreach (int v in best.Values) total += v;
-            return DestinationScore(context, targetNode.node.Vector3Position) + total - MeteorThreat(targetNode.node);
+            Vector3 end = targetNode.node.Vector3Position;
+            return DestinationScore(context, end) + total - MeteorThreat(targetNode.node) - EnemyArcThreat(context, end);
         }
 
         private static float MeteorThreat(CustomGridNodeBase node)
@@ -92,49 +124,94 @@ namespace CompanionAI_v3.GameInterface
             return dangerous != null && node != null && dangerous.ContainsKey(node) ? MeteorPenalty : 0f;
         }
 
+        /// <summary>
+        /// Penalty for ending where enemy capital ships that can reach us next turn have their bow on us. Ships turn
+        /// slowly, so a ship we end behind needs most of its turn to bring its guns to bear (the game's TryToStayBehind
+        /// brain option weighs the same angles).
+        /// </summary>
+        private static float EnemyArcThreat(DecisionContext context, Vector3 end)
+        {
+            float threat = 0f;
+            foreach (var enemy in ShipCombatInfo.CapitalEnemies(context))
+            {
+                if (enemy.DistanceToInCells(end) > EnemyReach(enemy)) continue;
+                float angle = ShipCombatInfo.AngleFromBow(enemy, end);
+                if (angle < 90f) threat += EnemyBowPenalty;
+                else if (angle < 135f) threat += EnemyFlankPenalty;
+            }
+            return threat;
+        }
+
+        private static int EnemyReach(StarshipEntity enemy)
+        {
+            string id = enemy.UniqueId;
+            if (!_enemyReach.TryGetValue(id, out int reach))
+            {
+                reach = ShipCombatInfo.WeaponRange(enemy) + (int)ShipCombatInfo.TurnMovePoints(enemy);
+                _enemyReach[id] = reach;
+            }
+            return reach;
+        }
+
         /// <summary>0.95 / (1 + |distance to the nearest capital ship - 3|), the game's formula with a brain's defaults.</summary>
         private static float DestinationScore(DecisionContext context, Vector3 destination)
         {
-            if (context?.Enemies == null) return 0f;
             int minDist = int.MaxValue;
-            foreach (var enemy in context.Enemies)
-            {
-                if (enemy.Entity is StarshipEntity ship && !ship.Blueprint.IsSoftUnit)
-                    minDist = Math.Min(minDist, ship.DistanceToInCells(destination));
-            }
+            foreach (var ship in ShipCombatInfo.CapitalEnemies(context))
+                minDist = Math.Min(minDist, ship.DistanceToInCells(destination));
             if (minDist == int.MaxValue) return 0f;
             return 0.95f / (1f + Math.Abs(minDist - DesiredDistance));
         }
 
         /// <summary>
-        /// What one use of the ability on the target is worth. Capital ships come first, more when their hull is
-        /// low or their shields are mostly down. Strike craft and torpedoes (soft units) take 1 damage per hit
-        /// unless the ammo is area-effect, and direct torpedo hits on them always miss, so they come last.
-        /// Abilities with no ship weapon (ramming, Full Ahead) are kept off soft units and rank lowest otherwise.
+        /// What one use of the ability on the target is worth.
+        ///  - Weapons: capital ships first, more when their hull is low or their shields are mostly down. Strike
+        ///    craft and torpedoes take 1 damage per hit unless the ammo is area-effect, and direct torpedo hits on
+        ///    them always miss, so they come last.
+        ///  - Launches (strike craft, wingmen): 1, as the game's AI casts them ahead of the ship whatever the target.
+        ///  - No ship weapon otherwise: 0 unless it targets an enemy ship directly (ramming and Swing Run aim at a point, and
+        ///    the game's firing step only aims at ships, so they would only pull the path toward shots that never
+        ///    happen); otherwise 1 on capital ships, 0 on small craft.
+        ///  - Shield Pulse (the version that spends 25% of our shields): only on a ship with an Aeldari holo-field,
+        ///    Drukhari shadow-field or Necron falling-apart effect, or while our shields are at half or more.
+        ///  - Boarding Team and Empyrean Storm: the ship gets one ultimate per combat, so only on a capital ship
+        ///    under half hull.
         /// </summary>
         internal static int ShipTargetValue(AbilityData ability, MechanicEntity target)
         {
             if (!(target is StarshipEntity ship)) return 1;
             var weapon = ability?.StarshipWeapon;
+            bool soft = ship.Blueprint.IsSoftUnit;
 
-            if (ship.Blueprint.IsSoftUnit)
+            if (weapon == null)
             {
-                if (weapon == null || weapon.Blueprint.WeaponType == StarshipWeaponType.TorpedoTubes) return 0;
+                if (ShipCombatInfo.IsLaunch(ability)) return 1;
+                if (ability == null || !ability.CanTargetEnemies || soft) return 0;
+                string guid = ShipCombatInfo.Guid(ability);
+                if (guid == BOARDING_TEAM || guid == EMPYREAN_STORM)
+                    return ShipCombatInfo.HullFraction(ship) < 0.5f ? 6 : 0;
+                if (guid == SHIELD_PULSE && !ShieldPulsePays(ability, ship)) return 0;
+                return 1;
+            }
+
+            if (soft)
+            {
+                if (weapon.Blueprint.WeaponType == StarshipWeaponType.TorpedoTubes) return 0;
                 return weapon.Ammo != null && weapon.IsAEAmmo ? 3 : 1;
             }
 
-            if (weapon == null) return 1;
             int value = 4;
-            int maxHp = ship.Health.MaxHitPoints;
-            if (maxHp > 0)
-            {
-                float hull = (float)ship.Health.HitPointsLeft / maxHp;
-                if (hull < 0.5f) value += 2;
-                if (hull < 0.25f) value += 2;
-            }
-            var shields = ship.Shields;
-            if (shields.ShieldsMaxSum > 0 && shields.ShieldsSum * 4 <= shields.ShieldsMaxSum) value += 1;
+            float hull = ShipCombatInfo.HullFraction(ship);
+            if (hull < 0.5f) value += 2;
+            if (hull < 0.25f) value += 2;
+            if (ShipCombatInfo.ShieldFraction(ship) <= 0.25f) value += 1;
             return value;
+        }
+
+        private static bool ShieldPulsePays(AbilityData pulse, StarshipEntity target)
+        {
+            if (ShipCombatInfo.HasFact(target, AELDARI_HOLOFIELD, DRUKHARI_SHADOWFIELD, NECRON_FALLING_APART)) return true;
+            return pulse.Caster is StarshipEntity own && ShipCombatInfo.ShieldFraction(own) >= 0.5f;
         }
     }
 }

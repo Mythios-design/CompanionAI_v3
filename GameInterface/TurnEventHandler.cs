@@ -63,6 +63,8 @@ namespace CompanionAI_v3.GameInterface
             if (TurnOrchestrator.IsShipAIDelegated(unit))
             {
                 TurnOrchestrator.ApplyShipForceAI(unit);
+                ShipAIPatch.ResetTurn();
+                Planning.Planners.ShipPostPlanner.OnTurnStart(unit);
                 return;  // CompanionAI는 개입하지 않음, 게임 네이티브 AI가 제어
             }
 

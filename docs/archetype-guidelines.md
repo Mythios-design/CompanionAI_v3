@@ -273,6 +273,35 @@ A granted turn is wasted on an ally who can't act with it. `TurnGrantPolicy` dec
 
 > **Decision:** Forewarning goes on the tank and melee allies first, preferring whoever is most threatened, and only once per ally per combat. **To build.**
 
+## Space combat (Patient Fortune)
+
+With "Ship Combat AI" on, the player ship runs on the game's own starship AI. The ship has no brain, so the mod stands in for one (`ShipAIPatch.cs`) and casts the self-targeted post abilities the game's AI never uses (`ShipPostPlanner.cs`, hooks in `ShipPostPatch.cs`). The game's AI log ("[AI]" lines) shows every plan and shot; the planner writes "[Ship]" lines.
+
+**Movement and targets** (`ShipAIPatch`):
+- A path scores the best value of each ability anywhere along it, plus a small bonus for ending 3 tiles from the nearest capital ship.
+- Paths through tiles the ship can't stop on are rejected; ending in a meteor stream costs 100.
+- Ending within 90° of an enemy capital ship's bow costs 3, and 90° to 135° costs 1, when that ship can reach us next turn (weapon range plus movement).
+- Target values: capital ships 4, +2 below half hull, +2 more below a quarter, +1 with shields mostly down. Strike craft and torpedoes 1 (3 for area-effect ammo); never torpedoes at them. Launches 1. Other abilities with no ship weapon: 1 on capital ships if they target a ship directly, otherwise 0 (ramming and Swing Run aim at a point and the firing step never casts them).
+- Values are frozen for the ship's turn: the game fires only at a target whose value matches the planned one.
+- Shield Pulse (the version costing 25% of our shields): only on a ship with an Aeldari holo-field, Drukhari shadow-field or Necron falling-apart effect, or with our shields at half or more.
+
+**Post abilities and ultimates** (`ShipPostPlanner`). Micro-abilities are free with a 1 to 3 round cooldown and one per post per round; the ship gets one ultimate per combat.
+
+| When | Ability | Rule |
+|---|---|---|
+| Plan start | Corp Chant, else Evasion Tactics | Shields under 50% or hull under 60% |
+| Plan start | Mass Torpedo | A capital ship within torpedo range plus movement |
+| Plan start | Overdrive | Only as the ship's sole ultimate, with no capital ship within weapon range plus movement |
+| Plan start | Boost Lance | A capital ship within lance range plus movement |
+| Plan start | Arc Augury | The nearest capital ship is just out of reach and within the bonus range |
+| Plan start | New Heading | No capital ship ahead of the beam, movement left |
+| After a volley | Rapid Reload (macrobatteries, torpedoes) | A capital ship within that weapon's reach; then the ship replans. The upgraded macrobattery version waits until the lances have fired (-25% to hit) |
+| Value-driven | Boarding Team, Empyrean Storm | Only on a capital ship under half hull |
+| Turn end | Restart Shields | The game's own rule: shields at or below 50% in total, or the weakest sector at or below 20% |
+| Turn end | Reinforce Shields | The sector facing the most capital ships that can reach us next turn, if not reinforced already |
+
+Not handled: Shallow Jump, Swing Run, Strafe, Backing, Torpedo Control, Focused Efforts, crew quarters, Overwatch (costs 1 AP and no post grants it).
+
 ---
 
 ## Decisions
