@@ -84,6 +84,15 @@ namespace CompanionAI_v3.Planning.Planners
                     return true;
                 });
 
+                // Advanced-archetype abilities that only pay off in some situations (ArchetypeConditions)
+                RemoveWhere(situation, a =>
+                {
+                    string why = ArchetypeConditions.WhyHold(a, situation);
+                    if (why == null) return false;
+                    Log.Planning.Info($"[AbilityPolicy] {situation.Unit.CharacterName}: {a.Name} held: {why}");
+                    return true;
+                });
+
                 int removedDesperate = RemoveWhere(situation, a => a.Blueprint?.IsDesperateMeasure == true);
                 if (removedDesperate > 0)
                     Log.Planning.Info($"[AbilityPolicy] {situation.Unit.CharacterName}: Desperate Measures held back (AI never uses them)");

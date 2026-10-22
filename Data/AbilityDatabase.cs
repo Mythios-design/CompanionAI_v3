@@ -585,8 +585,8 @@ namespace CompanionAI_v3.Data
             // Piercing Shot - 관통 사격
             { "0d8923eff3f94a5faf71bfe36ca19d70", new AbilityInfo("0d8923eff3f94a5faf71bfe36ca19d70", "PiercingShot", AbilityTiming.PreAttackBuff, flags: AbilityFlags.SelfTargetOnly) },
 
-            // ★ v3.36.0: Cull the Bold - 강자 숙청 (자기 버프 — 강한 적 대상 데미지 증가)
-            { "f333222c78614e6fb8ca145dd8cafcf6", new AbilityInfo("f333222c78614e6fb8ca145dd8cafcf6", "CullTheBold", AbilityTiming.PreCombatBuff, flags: AbilityFlags.SelfTargetOnly) },
+            // Cull the Bold: buffs only the next attack this turn, so it is cast right before one
+            { "f333222c78614e6fb8ca145dd8cafcf6", new AbilityInfo("f333222c78614e6fb8ca145dd8cafcf6", "CullTheBold", AbilityTiming.PreAttackBuff, flags: AbilityFlags.SelfTargetOnly) },
 
             // ★ v3.36.0: Join the Pack (Raid) - 습격 (자기 버프 — 아군과 협동 공격)
             { "1394e5c9a6a347db841d961a87f375f4", new AbilityInfo("1394e5c9a6a347db841d961a87f375f4", "JoinThePack", AbilityTiming.PreCombatBuff, flags: AbilityFlags.SelfTargetOnly) },
