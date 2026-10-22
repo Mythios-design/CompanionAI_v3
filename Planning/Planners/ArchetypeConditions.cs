@@ -22,6 +22,17 @@ namespace CompanionAI_v3.Planning.Planners
             {
                 case RAID:
                     return PreyInAlliesReach(situation) ? null : "no prey within an ally's reach";
+                case TacticianPlanner.INSPIRE:
+                case TacticianPlanner.LINCHPIN:
+                case TacticianPlanner.STRONGPOINT:
+                case TacticianPlanner.PRESS_THE_ADVANTAGE:
+                {
+                    string chosen = TacticianPlanner.ChosenSpender(situation, out string why);
+                    if (chosen == ability.Blueprint.AssetGuid.ToString()) return null;
+                    return why ?? "tactical advantage goes to another order this turn";
+                }
+                case TacticianPlanner.FERVOUR:
+                    return TacticianPlanner.WhyHoldFervour(situation);
                 default:
                     return null;
             }

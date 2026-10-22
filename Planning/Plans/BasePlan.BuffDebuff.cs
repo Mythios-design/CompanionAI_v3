@@ -319,6 +319,13 @@ namespace CompanionAI_v3.Planning.Plans
                     targetList = ExtraTurnValue.Rank(situation.CombatantAllies, situation.Unit, situation.Enemies, buff.Name, RoleName);
                     if (targetList.Count == 0) continue;
                 }
+                // Master Tactician orders: the carry or top damage dealer (Inspire, Linchpin), the most threatened ally (Strongpoint)
+                var tacticianTargets = TacticianPlanner.AllyTargets(buffGuid, situation);
+                if (tacticianTargets != null)
+                {
+                    targetList = tacticianTargets;
+                    if (targetList.Count == 0) continue;
+                }
 
                 foreach (var target in targetList)
                 {

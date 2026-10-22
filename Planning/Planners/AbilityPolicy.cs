@@ -32,7 +32,7 @@ namespace CompanionAI_v3.Planning.Planners
                || AcrobaticArtistryPlanner.IsAcrobaticArtistry(a) || WordOfTheEmperorPlanner.IsWordOfTheEmperor(a)
                || RainingBloodPlanner.IsRainingBlood(a)
                || SoldierBuffPlanner.IsRapidFire(a) || SoldierBuffPlanner.IsConcentratedFire(a)
-               || AllyKillMarkPlanner.IsHotOnTheTrail(a);
+               || AllyKillMarkPlanner.IsHotOnTheTrail(a) || AllyKillMarkPlanner.IsAssignObjective(a);
 
         public static void Apply(Situation situation)
         {
@@ -81,6 +81,13 @@ namespace CompanionAI_v3.Planning.Planners
                 {
                     if (!AllyKillMarkPlanner.IsHotOnTheTrail(a)) return false;
                     situation.HeldHotOnTheTrail = situation.HeldHotOnTheTrail ?? a;
+                    return true;
+                });
+                // Assign Objective rewards the ally who makes the kill: AllyKillMarkPlanner marks an enemy an ally can finish
+                RemoveWhere(situation, a =>
+                {
+                    if (!AllyKillMarkPlanner.IsAssignObjective(a)) return false;
+                    situation.HeldAssignObjective = situation.HeldAssignObjective ?? a;
                     return true;
                 });
 

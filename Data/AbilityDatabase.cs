@@ -473,7 +473,7 @@ namespace CompanionAI_v3.Data
             { "ca8040427b6d4a3d859991b62609b318", new AbilityInfo("ca8040427b6d4a3d859991b62609b318", "Linchpin", AbilityTiming.PreCombatBuff, flags: AbilityFlags.AllyTarget) },
 
             // Press the Advantage - 이점 활용, 자기 버프
-            { "60a2011e90b949f2a38fe4a6cefb5100", new AbilityInfo("60a2011e90b949f2a38fe4a6cefb5100", "PressTheAdvantage", AbilityTiming.PreCombatBuff, flags: AbilityFlags.SelfTargetOnly) },
+            { "60a2011e90b949f2a38fe4a6cefb5100", new AbilityInfo("60a2011e90b949f2a38fe4a6cefb5100", "PressTheAdvantage", AbilityTiming.PreAttackBuff, flags: AbilityFlags.SelfTargetOnly) },
 
             // Strongpoint - 거점, 아군 버프
             { "70ab234e53764c85a6f3d19de7bb182d", new AbilityInfo("70ab234e53764c85a6f3d19de7bb182d", "Strongpoint", AbilityTiming.PreCombatBuff, flags: AbilityFlags.AllyTarget) },

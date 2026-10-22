@@ -272,6 +272,9 @@ namespace CompanionAI_v3.Analysis
         /// <summary>Hot on the Trail ends the turn: held out of the marks, cast last on an enemy an ally can finish (AllyKillMarkPlanner).</summary>
         public AbilityData HeldHotOnTheTrail { get; set; }
 
+        /// <summary>Assign Objective rewards the ally who kills the mark: held out of the marks (AllyKillMarkPlanner).</summary>
+        public AbilityData HeldAssignObjective { get; set; }
+
         /// <summary>Tactical Knowledge, held out of every list: placed after the Operative's setup and shot (TacticalKnowledgePlanner).</summary>
         public AbilityData HeldTacticalKnowledge { get; set; }
 
@@ -534,6 +537,7 @@ namespace CompanionAI_v3.Analysis
             HeldBloodPhial = null;
             HeldRainingBlood = null;
             HeldHotOnTheTrail = null;
+            HeldAssignObjective = null;
             HeldTacticalKnowledge = null;
             HeldAcrobaticArtistry = null;
             HeldWordOfTheEmperor = null;
