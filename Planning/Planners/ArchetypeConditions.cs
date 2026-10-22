@@ -21,6 +21,9 @@ namespace CompanionAI_v3.Planning.Planners
         private const string WHERE_IT_HURTS = "cfdb72a6653c49ffa792fa99abfed128";     // Executioner_Keystone_Active_Ability
         private const string TERRIFYING_STRIKE = "d0c7cc80880242b1ba1ded8192c53ea4";
         private const string MERCILESS_VERDICT = "914b9182e9634dd1a3139c16485d091f";  // Executioner_DebiliatingShot_Ability
+        // Grand Strategist
+        private const string MOBILITY_ZONE = "2249e4658f5d4a4ab8180a1c7f15ed79";      // Strategist_Talent08_Ability
+
         private const float PainResonanceRange = 4f;
         private const int PainResonanceMinEnemies = 2;
         private const int GiftOfTormentMinCreatures = 3;
@@ -63,6 +66,10 @@ namespace CompanionAI_v3.Planning.Planners
                 case MERCILESS_VERDICT:
                     return IsRangedOrPsychic(situation.PrimaryAttack) && situation.HittableEnemies?.Count > 0
                         ? null : "the next attack isn't ranged or psychic";
+                case MOBILITY_ZONE:
+                    // A 1-cell step without attacks of opportunity, given to allies in a stratagem's area. Its use is
+                    // leaving melee, which the AI has no rule for; unregistered it would be auto-classified as a move
+                    return "a 1-cell disengage step, no AI rule uses it";
                 default:
                     return null;
             }
