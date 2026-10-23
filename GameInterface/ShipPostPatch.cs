@@ -22,6 +22,9 @@ namespace CompanionAI_v3.GameInterface
     ///    broken, so the tree plans again from where the ship is (the game's own path for plan-breaking casts).
     ///  - Turn end: the finish-turn step casts instead of finishing; the tree then starts over, and finishes once
     ///    the planner has nothing left.
+    ///  - Focus ship (ShipFocus): picked right before the path search. When it dies, the next action marks the
+    ///    plan broken, or the finish-turn step starts the tree over, so the rest of the turn is planned again
+    ///    around a new focus.
     /// </summary>
     [HarmonyPatch]
     public static class ShipPostPatch
@@ -37,7 +40,9 @@ namespace CompanionAI_v3.GameInterface
             var ship = ShipOf(blackboard);
             if (ship == null) return true;
             if (IsBusy(ship)) { __result = Status.Running; return false; }
-            return !TryCast(ShipPhase.PlanStart, ship, blackboard, Status.Running, ref __result);
+            if (TryCast(ShipPhase.PlanStart, ship, blackboard, Status.Running, ref __result)) return false;
+            PickFocus(ship, blackboard);
+            return true;
         }
 
         [HarmonyPatch(typeof(TaskNodeDoNextAction), "TickInternal")]
@@ -58,8 +63,11 @@ namespace CompanionAI_v3.GameInterface
         {
             if (__state || __result != Status.Success) return;
             var ship = ShipOf(blackboard);
-            if (ship != null && __instance.CmdParams is UnitUseAbilityParams cast)
+            if (ship == null) return;
+            if (__instance.CmdParams is UnitUseAbilityParams cast)
                 ShipPostPlanner.NoteShot(ship, cast.Ability);
+            if (ShipFocus.FocusDied(ship) && blackboard.DecisionContext is SpaceCombatDecisionContext context)
+                context.IsLastActionBrokePlan = true;
         }
 
         [HarmonyPatch(typeof(TaskNodeTryFinishTurn), "TickInternal")]
@@ -68,7 +76,26 @@ namespace CompanionAI_v3.GameInterface
         {
             var ship = ShipOf(blackboard);
             if (ship == null || IsBusy(ship)) return true;
+            if (ShipFocus.FocusDied(ship))
+            {
+                // Success without finishing starts the tree over: the path search picks a new focus
+                Log.Engine.Info($"[Ship] {ship.CharacterName}: focus ship destroyed, planning the rest of the turn again");
+                __result = Status.Success;
+                return false;
+            }
             return !TryCast(ShipPhase.TurnEnd, ship, blackboard, Status.Success, ref __result);
+        }
+
+        private static void PickFocus(StarshipEntity ship, Blackboard blackboard)
+        {
+            try
+            {
+                if (ShipFocus.Ensure(ship, blackboard.DecisionContext)) ShipAIPatch.ClearTurnValues();
+            }
+            catch (Exception ex)
+            {
+                Log.Engine.Error(ex, $"[ShipPostPatch] focus pick failed for {ship.CharacterName}");
+            }
         }
 
         /// <summary>The delegated player ship this tree belongs to, or null.</summary>

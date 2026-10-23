@@ -23,12 +23,15 @@ namespace CompanionAI_v3.GameInterface
     /// so the ship would do nothing. These patches stand in for the brain, only for a delegated player ship
     /// without one (UsesStandInBrain); enemy ships and wingmen keep their own brains.
     ///  1. Destination: best at 3 tiles from the nearest capital ship (the brain default).
-    ///  2. Trajectory: destination score plus, for each ability, its best value anywhere on the path. A path
-    ///     through a tile the ship can't stop on scores 0 and ending in a meteor stream costs 100, as with a
-    ///     brain. Ending in front of an enemy capital ship that can reach us costs EnemyBowPenalty (EnemyFlankPenalty
-    ///     off its bow quarter), the game's "stay behind" brain option sized against shot values.
+    ///  2. Trajectory: destination score plus, for each ability, its best value anywhere on the path, plus the
+    ///     angle score toward each enemy capital ship that can reach us next turn: SternBonus behind it,
+    ///     -FlankPenalty on its flank, -BowPenalty in front of it (the game's "stay behind" brain option sized
+    ///     against shot values). A path through a tile the ship can't stop on scores 0 and ending in a meteor
+    ///     stream costs 100, as with a brain. The game only takes a path scoring above 0, so every other path
+    ///     starts from a base that outweighs the worst angle score.
     ///  3. Ability value per target (ShipTargetValue). The game uses it to pick the path and, when firing, shoots
-    ///     the first enemy whose value matches the planned one, so values are frozen for the ship's turn.
+    ///     the first enemy whose value matches the planned one, so values are frozen for the ship's turn. Weapons
+    ///     are worth more against the turn's focus ship (ShipFocus), so paths that bring more guns onto it win.
     /// The ship's post abilities and ultimates are cast by ShipPostPlanner (ShipPostPatch).
     /// </summary>
     [HarmonyPatch]
@@ -38,9 +41,11 @@ namespace CompanionAI_v3.GameInterface
         private const float MeteorPenalty = 100f;
         private const float DesiredDistance = 3f;
         /// <summary>Ending within 90 degrees of an enemy capital ship's bow, where it needs no turn to fire.</summary>
-        private const float EnemyBowPenalty = 3f;
+        private const float BowPenalty = 3f;
         /// <summary>Ending 90 to 135 degrees off its bow.</summary>
-        private const float EnemyFlankPenalty = 1f;
+        private const float FlankPenalty = 1f;
+        /// <summary>Ending more than 135 degrees off its bow, where it needs most of its turn to bring guns to bear.</summary>
+        private const float SternBonus = 3f;
 
         private const string SHIELD_PULSE = "46c2d6cde7eb46c2a0b464764d670b72";       // MA_ShieldGen_ShieldsPulse (spends 25% of our shields)
         private const string BOARDING_TEAM = "738ca17f7a52449c9f9fc16bb59319d1";      // UA_Bridge_BoardingTeam_Ability
@@ -59,7 +64,11 @@ namespace CompanionAI_v3.GameInterface
         {
             _turnValues.Clear();
             _enemyReach.Clear();
+            ShipFocus.Reset();
         }
+
+        /// <summary>Forgets the frozen ability values, so they are worked out again (the focus ship changed).</summary>
+        public static void ClearTurnValues() => _turnValues.Clear();
 
         [HarmonyPatch(typeof(TaskNodeFindBestTrajectory), "CalculateDestinationScore")]
         [HarmonyPrefix]
@@ -115,7 +124,9 @@ namespace CompanionAI_v3.GameInterface
             int total = 0;
             foreach (int v in best.Values) total += v;
             Vector3 end = targetNode.node.Vector3Position;
-            return DestinationScore(context, end) + total - MeteorThreat(targetNode.node) - EnemyArcThreat(context, end);
+            var enemies = ShipCombatInfo.CapitalEnemies(context);
+            float pathBase = 1f + BowPenalty * enemies.Count;
+            return pathBase + DestinationScore(context, end) + total - MeteorThreat(targetNode.node) + EnemyAngleScore(enemies, end);
         }
 
         private static float MeteorThreat(CustomGridNodeBase node)
@@ -125,21 +136,22 @@ namespace CompanionAI_v3.GameInterface
         }
 
         /// <summary>
-        /// Penalty for ending where enemy capital ships that can reach us next turn have their bow on us. Ships turn
-        /// slowly, so a ship we end behind needs most of its turn to bring its guns to bear (the game's TryToStayBehind
-        /// brain option weighs the same angles).
+        /// Where we end relative to each enemy capital ship that can reach us next turn. Ships turn slowly, so a ship
+        /// we end behind needs most of its turn to bring its guns to bear (the game's TryToStayBehind brain option
+        /// weighs the same angles).
         /// </summary>
-        private static float EnemyArcThreat(DecisionContext context, Vector3 end)
+        private static float EnemyAngleScore(List<StarshipEntity> enemies, Vector3 end)
         {
-            float threat = 0f;
-            foreach (var enemy in ShipCombatInfo.CapitalEnemies(context))
+            float score = 0f;
+            foreach (var enemy in enemies)
             {
                 if (enemy.DistanceToInCells(end) > EnemyReach(enemy)) continue;
                 float angle = ShipCombatInfo.AngleFromBow(enemy, end);
-                if (angle < 90f) threat += EnemyBowPenalty;
-                else if (angle < 135f) threat += EnemyFlankPenalty;
+                if (angle < 90f) score -= BowPenalty;
+                else if (angle < 135f) score -= FlankPenalty;
+                else score += SternBonus;
             }
-            return threat;
+            return score;
         }
 
         private static int EnemyReach(StarshipEntity enemy)
@@ -165,7 +177,8 @@ namespace CompanionAI_v3.GameInterface
 
         /// <summary>
         /// What one use of the ability on the target is worth.
-        ///  - Weapons: capital ships first, more when their hull is low or their shields are mostly down. Strike
+        ///  - Weapons: capital ships first, more when their hull is low or their shields are mostly down, and
+        ///    ShipFocus.Bonus more against the turn's focus ship. Strike
         ///    craft and torpedoes take 1 damage per hit unless the ammo is area-effect, and direct torpedo hits on
         ///    them always miss, so they come last.
         ///  - Launches (strike craft, wingmen): 1, as the game's AI casts them ahead of the ship whatever the target.
@@ -205,6 +218,7 @@ namespace CompanionAI_v3.GameInterface
             if (hull < 0.5f) value += 2;
             if (hull < 0.25f) value += 2;
             if (ShipCombatInfo.ShieldFraction(ship) <= 0.25f) value += 1;
+            if (ship == ShipFocus.Current(ability.Caster as StarshipEntity)) value += ShipFocus.Bonus;
             return value;
         }
 
