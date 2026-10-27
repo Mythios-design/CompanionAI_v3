@@ -32,7 +32,8 @@ namespace CompanionAI_v3.Planning.Planners
                || AcrobaticArtistryPlanner.IsAcrobaticArtistry(a) || WordOfTheEmperorPlanner.IsWordOfTheEmperor(a)
                || RainingBloodPlanner.IsRainingBlood(a)
                || SoldierBuffPlanner.IsRapidFire(a) || SoldierBuffPlanner.IsConcentratedFire(a)
-               || AllyKillMarkPlanner.IsHotOnTheTrail(a) || AllyKillMarkPlanner.IsAssignObjective(a);
+               || AllyKillMarkPlanner.IsHotOnTheTrail(a) || AllyKillMarkPlanner.IsAssignObjective(a)
+               || FamiliarAbilities.IsApprehendAbility(a);
 
         public static void Apply(Situation situation)
         {
@@ -90,6 +91,10 @@ namespace CompanionAI_v3.Planning.Planners
                     situation.HeldAssignObjective = situation.HeldAssignObjective ?? a;
                     return true;
                 });
+
+                // Apprehend is the mastiff's order, cost rising each use: only the familiar planner places it (it reads
+                // the situation's familiar abilities, which this doesn't touch)
+                RemoveWhere(situation, a => FamiliarAbilities.IsApprehendAbility(a));
 
                 // Advanced-archetype abilities that only pay off in some situations (ArchetypeConditions)
                 RemoveWhere(situation, a =>

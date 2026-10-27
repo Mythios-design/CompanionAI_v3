@@ -12,6 +12,7 @@ using CompanionAI_v3.Core;
 using CompanionAI_v3.Data;
 using CompanionAI_v3.GameInterface;
 using CompanionAI_v3.Logging;
+using CompanionAI_v3.Planning.Planners;
 using CompanionAI_v3.Settings;
 
 namespace CompanionAI_v3.Planning.Plans
@@ -614,12 +615,15 @@ namespace CompanionAI_v3.Planning.Plans
         }
 
         /// <summary>
-        /// ★ v3.22.6: 사역마 Apprehend 계획 (Cyber-Mastiff) — 완전 재작성
-        /// - TeamBlackboard 기반 대상 고정 (재발행 방지)
-        /// - BestTarget 연동 (마스터 공격 대상과 동일 → 연대공격 극대화)
-        /// - 도달 가능성 체크 (마스티프가 2-3턴 내 도달 불가한 원거리 적 스킵)
+        /// Cyber-mastiff Apprehend, once per plan here (repeats: PlanApprehendRepeats). Each use is a +50% damage
+        /// dog attack, and the hold lasts until the dog gets another order:
+        /// - Its current target while alive (TeamBlackboard), every turn; when Solomorne can't target it this turn,
+        ///   no Apprehend, so the hold stays.
+        /// - Otherwise a new target: BestTarget (the master's attack target), then the nearest hittable enemy the
+        ///   dog can reach, then the nearest enemy.
+        /// - Cost from ApprehendCost (each use this round +1 AP, Rite of Calibration's discount).
         /// </summary>
-        protected PlannedAction PlanFamiliarApprehend(Situation situation, ref float remainingAP)
+        protected PlannedAction PlanFamiliarApprehend(Situation situation, List<PlannedAction> actions, ref float remainingAP)
         {
             if (situation.FamiliarType != PetType.Mastiff) return null;
 
@@ -627,22 +631,24 @@ namespace CompanionAI_v3.Planning.Plans
                 a => FamiliarAbilities.IsApprehendAbility(a));
             if (apprehend == null) return null;
 
-            float apCost = CombatAPI.GetAbilityAPCost(apprehend);
+            float apCost = ApprehendCost.Next(situation.Unit, apprehend, actions);
             if (remainingAP < apCost) return null;
 
-            // ★ v3.22.6: 기존 Apprehend 대상 확인 — 생존 시 재발행 불필요
             string masterId = situation.Unit.UniqueId;
-            string existingTargetId = TeamBlackboard.Instance.GetMastiffApprehendTarget(masterId);
-            if (existingTargetId != null)
+            var current = CurrentApprehendTarget(situation);
+            if (current != null)
             {
-                var existingTarget = CollectionHelper.FirstOrDefault(situation.Enemies,
-                    e => e.IsConscious && e.UniqueId == existingTargetId);
-                if (existingTarget != null)
+                if (!CombatAPI.CanUseAbilityOn(apprehend, new TargetWrapper(current), out string why))
                 {
-                    if (Main.IsDebugEnabled) Log.Planning.Debug($"[{RoleName}] Mastiff Apprehend: Already active on {existingTarget.CharacterName}, skipping");
-                    return null;  // 대상 생존 → 재발행 불필요
+                    Log.Planning.Info($"[{RoleName}] Mastiff Apprehend: can't order it on {current.CharacterName} ({why}), the hold stays");
+                    return null;
                 }
-                // 대상 사망/무효 → clear 후 새 대상 선택
+                remainingAP -= apCost;
+                Log.Planning.Info($"[{RoleName}] Mastiff Apprehend: current target {current.CharacterName} ({apCost:F0} AP)");
+                return PlannedAction.Attack(apprehend, current, $"Mastiff Apprehend on {current.CharacterName}", apCost);
+            }
+            if (TeamBlackboard.Instance.GetMastiffApprehendTarget(masterId) != null)
+            {
                 TeamBlackboard.Instance.ClearMastiffApprehendTarget(masterId);
                 Log.Planning.Info($"[{RoleName}] Mastiff Apprehend: Previous target eliminated, selecting new target");
             }
@@ -710,6 +716,37 @@ namespace CompanionAI_v3.Planning.Plans
         /// ★ v3.22.6: 마스티프 도달 가능성 체크
         /// 마스티프 MP가 아닌 절대 거리 기준 (pet AI가 이동 관리, 우리 API로 정확한 MP 조회 어려움)
         /// </summary>
+        /// <summary>The dog's Apprehend target (TeamBlackboard) while it's alive, else null.</summary>
+        protected BaseUnitEntity CurrentApprehendTarget(Situation situation)
+        {
+            string id = TeamBlackboard.Instance.GetMastiffApprehendTarget(situation.Unit.UniqueId);
+            if (id == null) return null;
+            return CollectionHelper.FirstOrDefault(situation.Enemies, e => e.IsConscious && e.UniqueId == id);
+        }
+
+        /// <summary>
+        /// After the master's attacks: more Apprehends on the dog's current target while the AP left (minus the
+        /// turn-ending reserve) covers each one's rising cost. Each is another +50% damage dog attack.
+        /// </summary>
+        protected void PlanApprehendRepeats(Situation situation, List<PlannedAction> actions, ref float remainingAP, APBudget budget)
+        {
+            if (situation.FamiliarType != PetType.Mastiff) return;
+            var apprehend = CollectionHelper.FirstOrDefault(situation.FamiliarAbilities,
+                a => FamiliarAbilities.IsApprehendAbility(a));
+            var target = apprehend != null ? CurrentApprehendTarget(situation) : null;
+            if (target == null || !IsMastiffReachable(situation, target)) return;
+            if (!CombatAPI.CanUseAbilityOn(apprehend, new TargetWrapper(target), out _)) return;
+
+            while (true)
+            {
+                float cost = ApprehendCost.Next(situation.Unit, apprehend, actions);
+                if (!budget.CanAfford(cost, remainingAP)) break;
+                remainingAP -= cost;
+                actions.Add(PlannedAction.Attack(apprehend, target, $"Apprehend again on {target.CharacterName}", cost));
+                Log.Planning.Info($"[{RoleName}] Mastiff Apprehend again on {target.CharacterName} ({cost:F0} AP, {remainingAP:F0} left)");
+            }
+        }
+
         private bool IsMastiffReachable(Situation situation, BaseUnitEntity enemy)
         {
             if (situation.Familiar == null) return false;

@@ -470,7 +470,13 @@ namespace CompanionAI_v3.Planning.Plans
 
                     if (mastiffApprehendActive)
                     {
-                        Log.Planning.Info($"[Overseer] Phase 3.7: Mastiff Apprehend active — all mastiff commands SKIPPED (AP saved for master)");
+                        // Every turn on its current target: a +50% damage dog attack that keeps the hold
+                        var again = PlanFamiliarApprehend(situation, actions, ref remainingAP);
+                        if (again != null)
+                        {
+                            actions.Add(again);
+                            Log.Planning.Info($"[Overseer] Phase 3.7: Mastiff Apprehend (current target)");
+                        }
                     }
                     else
                     {
@@ -483,7 +489,7 @@ namespace CompanionAI_v3.Planning.Plans
                         }
 
                         // Apprehend → JumpClaws → Claws → Roam (폴백 체인)
-                        var apprehend = PlanFamiliarApprehend(situation, ref remainingAP);
+                        var apprehend = PlanFamiliarApprehend(situation, actions, ref remainingAP);
                         if (apprehend != null)
                         {
                             actions.Add(apprehend);
@@ -872,6 +878,9 @@ namespace CompanionAI_v3.Planning.Plans
             {
                 Log.Planning.Info($"[Overseer] Phase 5: {attacksPlanned} attacks planned");
             }
+
+            // Phase 5.1: AP left after the master's attacks goes to more Apprehends on the dog's target
+            PlanApprehendRepeats(situation, actions, ref remainingAP, budget);
 
             // ★ v3.8.72: Hittable mismatch 사후 보정
             HandleHittableMismatch(situation, didPlanAttack, attackContext);

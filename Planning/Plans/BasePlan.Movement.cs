@@ -728,29 +728,26 @@ namespace CompanionAI_v3.Planning.Plans
             if (hex != null)
                 actions.Add(hex);
 
-            // 7. Mastiff: Apprehend → JumpClaws → Claws → Roam (폴백 체인)
-            // ★ v3.22.6: Apprehend 활성 시 전부 스킵 (AP 절약 → 마스터 공격 강화)
-            if (!mastiffApprehendActive)
+            // 7. Mastiff: Apprehend (on its current target too, every turn); with no current target, falls back to
+            //    JumpClaws → Claws → Roam
+            var familiarApprehend = PlanFamiliarApprehend(situation, actions, ref remainingAP);
+            if (familiarApprehend != null)
+                actions.Add(familiarApprehend);
+            else if (!mastiffApprehendActive)
             {
-                var familiarApprehend = PlanFamiliarApprehend(situation, ref remainingAP);
-                if (familiarApprehend != null)
-                    actions.Add(familiarApprehend);
+                var jumpClaws = PlanFamiliarJumpClaws(situation, ref remainingAP);
+                if (jumpClaws != null)
+                    actions.Add(jumpClaws);
                 else
                 {
-                    var jumpClaws = PlanFamiliarJumpClaws(situation, ref remainingAP);
-                    if (jumpClaws != null)
-                        actions.Add(jumpClaws);
+                    var mastiffClaws = PlanFamiliarClaws(situation, ref remainingAP);
+                    if (mastiffClaws != null)
+                        actions.Add(mastiffClaws);
                     else
                     {
-                        var mastiffClaws = PlanFamiliarClaws(situation, ref remainingAP);
-                        if (mastiffClaws != null)
-                            actions.Add(mastiffClaws);
-                        else
-                        {
-                            var roam = PlanFamiliarRoam(situation, ref remainingAP);
-                            if (roam != null)
-                                actions.Add(roam);
-                        }
+                        var roam = PlanFamiliarRoam(situation, ref remainingAP);
+                        if (roam != null)
+                            actions.Add(roam);
                     }
                 }
             }
