@@ -1542,7 +1542,12 @@ namespace CompanionAI_v3.Planning.Planners
                 {
                     var selfTarget = new TargetWrapper(situation.Unit);
                     string reason;
-                    if (CombatAPI.CanUseAbilityOn(runAndGun, selfTarget, out reason))
+                    string noApproach = RushPlanner.WhyNoApproach(situation, runAndGun, attackPlanned);
+                    if (noApproach != null)
+                    {
+                        Log.Planning.Info($"[{roleName}] Phase 6: {runAndGun.Name} held: {noApproach}");
+                    }
+                    else if (CombatAPI.CanUseAbilityOn(runAndGun, selfTarget, out reason))
                     {
                         remainingAP -= ragCost;
                         if (Main.IsDebugEnabled) Log.Planning.Debug($"[{roleName}] Phase 6: Planning {runAndGun.Name} (attackPlanned={attackPlanned})");

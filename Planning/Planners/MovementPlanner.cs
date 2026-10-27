@@ -932,6 +932,12 @@ namespace CompanionAI_v3.Planning.Planners
                     Log.Planning.Info($"[{roleName}] PlanMoveToEnemy: Chase move allowed");
                     isChaseMove = true;
                 }
+                else if (!situation.HasHittableEnemies && predictedMP > situation.CurrentMP)
+                {
+                    // Out of MP after the first move, but the plan casts an MP ability (Reckless Rush) before this one
+                    Log.Planning.Info($"[{roleName}] PlanMoveToEnemy: Chase move on the MP this plan restores ({predictedMP:F0})");
+                    isChaseMove = true;
+                }
                 else
                 {
                     if (Main.IsDebugEnabled) Log.Planning.Debug($"[{roleName}] PlanMoveToEnemy: Already moved this turn, skipping");

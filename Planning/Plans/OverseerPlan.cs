@@ -661,6 +661,7 @@ namespace CompanionAI_v3.Planning.Plans
             // ★ v3.18.16: Phase 4.9 갭클로저 추적 → Phase 5.6 중복 방지
             bool didPlanGapCloserPhase49 = false;
             TacticalEvaluation tacticalEval = EvaluateTacticalOptions(situation);
+            tacticalEval = RushToEngage(tacticalEval, situation, actions, ref remainingAP, ref remainingMP);
             if (tacticalEval != null && tacticalEval.WasEvaluated)
             {
                 bool shouldMoveBeforeAttack;
@@ -671,7 +672,7 @@ namespace CompanionAI_v3.Planning.Plans
                 if (tacticalMoveAction != null)
                 {
                     // ★ v3.16.4: MoveToAttack이면 갭클로저와 비교
-                    if (tacticalEval.ChosenStrategy == TacticalStrategy.MoveToAttack)
+                    if (tacticalEval.ChosenStrategy == TacticalStrategy.MoveToAttack && !_rushedToEngage)
                     {
                         PlannedAction gcPreMove;
                         var gcAction = EvaluateGapCloserAsAttack(
@@ -977,9 +978,9 @@ namespace CompanionAI_v3.Planning.Plans
             }
 
             // ★ v3.34.0: Phase 7.8 — 이동 전 MP 버프 (적이 사거리 밖이고 MP 부족 시)
-            if (!didPlanAttack && situation.NeedsReposition && situation.MPBuffAbility != null)
+            if (!didPlanAttack)
             {
-                var mpBuff = PlanMPBuffBeforeMove(situation, ref remainingAP, ref remainingMP);
+                var mpBuff = PlanMPBuffBeforeMove(situation, actions, ref remainingAP, ref remainingMP);
                 if (mpBuff != null)
                     actions.Add(mpBuff);
             }

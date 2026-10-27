@@ -353,7 +353,10 @@ namespace CompanionAI_v3.Planning
             // 기존 &&: 둘 다 true여야 비활성 → CanMove=false+MP=1인 구속 유닛도 MoveToAttack 시도 버그
             // ★ v3.34.0: MPBuffAbility가 있으면 MP=0이어도 확장 MP로 이동 가능
             float extendedMP = situation.CurrentMP + situation.MPBuffExpectedRecovery;
-            if (!situation.CanMove || (situation.CurrentMP <= 0 && extendedMP <= 0))
+            // CanMove is false at 0 MP too; with an MP buff only a root stops the move
+            bool canMove = situation.CanMove
+                || (situation.MPBuffExpectedRecovery > 0f && CombatAPI.CanMove(situation.Unit));
+            if (!canMove || extendedMP <= 0)
             {
                 option.IsViable = false;
                 option.Score = -1000f;
@@ -381,7 +384,7 @@ namespace CompanionAI_v3.Planning
                 float meleeRange = GetMeleeRange(unit);
 
                 // ★ v3.34.0: MPBuffAbility가 있으면 확장 MP로 도달 범위 확대
-                float meleeExtraMP = situation.MPBuffExpectedRecovery > 0 ? situation.MPBuffExpectedRecovery : 0f;
+                float meleeExtraMP = situation.MPBudgetWithBuff;
                 // A Bladedancer's Blood Oath target first; the nearest enemy if she can't get next to it this turn
                 var oathTarget = Planners.BladedancerTactics.GetOathTarget(situation);
                 var meleeTarget = oathTarget ?? situation.NearestEnemy;
@@ -453,7 +456,7 @@ namespace CompanionAI_v3.Planning
                 }
 
                 // ★ v3.34.0: MPBuffAbility가 있으면 확장 MP로 도달 범위 확대
-                float rangedExtraMP = situation.MPBuffExpectedRecovery > 0 ? situation.MPBuffExpectedRecovery : 0f;
+                float rangedExtraMP = situation.MPBudgetWithBuff;
                 bestPosition = MovementAPI.FindRangedAttackPositionSync(
                     unit,
                     situation.Enemies,

@@ -164,39 +164,64 @@ namespace CompanionAI_v3.Planning.Plans
         protected bool ShouldRetreat(Situation situation)
             => MovementPlanner.ShouldRetreat(situation);
 
+        /// <summary>Set by RushToEngage when this plan casts an MP ability to reach an attack position.</summary>
+        protected bool _rushedToEngage;
+
         /// <summary>
-        /// ★ v3.34.0: 이동 전 MP 버프 사용 — 적이 사거리 밖이고 MP 부족 시 선제 MP 회복
-        /// RecklessRush 등 PostFirstAction MP 회복 스킬을 이동 전에 사용
+        /// Rush to engage: when no attack is possible on current MP, evaluate again with an MP ability's extra MP
+        /// (RushPlanner.FindUsable). If that finds a move-and-attack, the ability goes in front of the move and that
+        /// evaluation is used. Needs AP for the ability plus the cheapest attack.
         /// </summary>
-        protected PlannedAction PlanMPBuffBeforeMove(Situation situation, ref float remainingAP, ref float remainingMP)
+        protected TacticalEvaluation RushToEngage(TacticalEvaluation eval, Situation situation, List<PlannedAction> actions,
+            ref float remainingAP, ref float remainingMP)
         {
-            if (situation.MPBuffAbility == null) return null;
-            if (situation.HasHittableEnemies) return null;  // 이미 공격 가능하면 불필요
-            if (!situation.HasLivingEnemies) return null;
-            if (situation.CurrentMP > 3f) return null;  // MP 충분하면 불필요
+            _rushedToEngage = false;
+            if (eval == null || !eval.WasEvaluated || eval.ChosenStrategy != TacticalStrategy.MoveOnly) return eval;
+            if (situation.HasHittableEnemies || !situation.HasLivingEnemies) return eval;
 
-            var ability = situation.MPBuffAbility;
-            float cost = CombatAPI.GetAbilityAPCost(ability);
-            if (remainingAP < cost + 1f) return null;  // AP가 버프+최소공격 비용 미만이면 스킵
+            var rush = RushPlanner.FindUsable(situation, actions, out float mp);
+            if (rush == null) return eval;
+            float cost = CombatAPI.GetAbilityAPCost(rush);
+            float attackCost = RushPlanner.CheapestAttackCost(situation);
+            if (cost + attackCost > remainingAP + 0.01f)
+            {
+                Log.Planning.Info($"[{RoleName}] {rush.Name} to engage held: {remainingAP:F0} AP, needs {cost:F0} + {attackCost:F0} for an attack");
+                return eval;
+            }
 
-            // 능력 사용 가능 여부 확인
-            // v3.117.63: 게임 업데이트로 GetUnavailabilityReasons() 반환 List → IEnumerable. .Count → .Any()
-            if (ability.GetUnavailabilityReasons().Any()) return null;
-            if (ability.IsRestricted) return null;
+            var savedAbility = situation.MPBuffAbility;
+            float savedRecovery = situation.MPBuffExpectedRecovery;
+            TacticalEvaluation rushed;
+            situation.MPBuffAbility = rush;
+            situation.MPBuffExpectedRecovery = mp;
+            try
+            {
+                rushed = EvaluateTacticalOptions(situation);
+            }
+            finally
+            {
+                situation.MPBuffAbility = savedAbility;
+                situation.MPBuffExpectedRecovery = savedRecovery;
+            }
+
+            if (rushed == null || !rushed.WasEvaluated || rushed.ChosenStrategy != TacticalStrategy.MoveToAttack)
+            {
+                Log.Planning.Info($"[{RoleName}] {rush.Name} to engage: no attack position even with +{mp:F0} MP");
+                return eval;
+            }
 
             remainingAP -= cost;
-            remainingMP += situation.MPBuffExpectedRecovery;
-
-            Log.Planning.Info($"[{RoleName}] MPBuff before move: {ability.Name} (cost={cost:F1} AP, +{situation.MPBuffExpectedRecovery:F0} MP, predicted MP={remainingMP:F1})");
-
-            return new PlannedAction
-            {
-                Type = ActionType.Buff,
-                Ability = ability,
-                Target = new TargetWrapper(situation.Unit),
-                Priority = 18  // Move(20) 직전
-            };
+            remainingMP = Math.Max(remainingMP, situation.CurrentMP) + mp;
+            RushPlanner.MarkPlanned(situation, rush);
+            actions.Add(PlannedAction.Buff(rush, situation.Unit, $"{rush.Name} to engage", cost));
+            _rushedToEngage = true;
+            Log.Planning.Info($"[{RoleName}] {rush.Name} to engage: +{mp:F0} MP reaches an attack position (hittable={rushed.ExpectedHittableCount})");
+            return rushed;
         }
+
+        /// <summary>Rush to close in before the turn's walk (RushPlanner.PlanCloseIn).</summary>
+        protected PlannedAction PlanMPBuffBeforeMove(Situation situation, List<PlannedAction> actions, ref float remainingAP, ref float remainingMP)
+            => RushPlanner.PlanCloseIn(situation, actions, ref remainingAP, ref remainingMP, RoleName);
 
         /// <summary>
         /// ★ v3.36.0: 모든 0 AP PreAttackBuff를 일괄 사용 (Phase 4.05)

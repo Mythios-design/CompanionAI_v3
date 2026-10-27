@@ -360,6 +360,12 @@ namespace CompanionAI_v3.Analysis
         /// <summary>★ v3.34.0: MPBuffAbility 사용 시 예상 MP 회복량</summary>
         public float MPBuffExpectedRecovery { get; set; }
 
+        /// <summary>
+        /// MP budget for position searches that count the MP buff (current MP plus its recovery); 0 without one,
+        /// which the searches read as "use current MP".
+        /// </summary>
+        public float MPBudgetWithBuff => MPBuffExpectedRecovery > 0f ? CurrentMP + MPBuffExpectedRecovery : 0f;
+
         #endregion
 
         #region Turn State

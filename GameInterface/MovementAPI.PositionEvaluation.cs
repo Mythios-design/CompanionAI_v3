@@ -486,7 +486,7 @@ namespace CompanionAI_v3.GameInterface
                 return null;
 
             // ★ predictedMP/weaponRange 는 plan(TacticalOptionEvaluator:382, 350-353)과 동일해야 argKey(_evalCache) 일치.
-            float predictedMP = situation.MPBuffExpectedRecovery > 0 ? situation.MPBuffExpectedRecovery : 0f;
+            float predictedMP = situation.MPBudgetWithBuff;
             var tiles = predictedMP > 0
                 ? FindAllReachableTilesWithThreatsSync(unit, predictedMP)
                 : FindAllReachableTilesWithThreatsSync(unit);

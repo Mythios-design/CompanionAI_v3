@@ -352,6 +352,7 @@ namespace CompanionAI_v3.Planning.Plans
             if (!alreadyMoved)
             {
                 tacticalEval = EvaluateTacticalOptions(situation);
+                tacticalEval = RushToEngage(tacticalEval, situation, actions, ref remainingAP, ref remainingMP);
                 if (tacticalEval != null && tacticalEval.WasEvaluated)
                 {
                     bool shouldMoveBeforeAttack;
@@ -516,9 +517,9 @@ namespace CompanionAI_v3.Planning.Plans
             }
 
             // ★ v3.34.0: Phase 8.8 — 이동 전 MP 버프 (적이 사거리 밖이고 MP 부족 시)
-            if (!didPlanAttack && situation.NeedsReposition && situation.MPBuffAbility != null)
+            if (!didPlanAttack)
             {
-                var mpBuff = PlanMPBuffBeforeMove(situation, ref remainingAP, ref remainingMP);
+                var mpBuff = PlanMPBuffBeforeMove(situation, actions, ref remainingAP, ref remainingMP);
                 if (mpBuff != null)
                     actions.Add(mpBuff);
             }

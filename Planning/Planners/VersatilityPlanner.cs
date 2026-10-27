@@ -75,10 +75,7 @@ namespace CompanionAI_v3.Planning.Planners
 
             remainingAP -= cost;
             // Not planned again by the move or post-action rules in this plan
-            string guid = rush.Blueprint.AssetGuid.ToString();
-            if (situation.MPBuffAbility?.Blueprint?.AssetGuid?.ToString() == guid) situation.MPBuffAbility = null;
-            situation.PostFirstActionAbilities?.RemoveAll(a => a?.Blueprint?.AssetGuid?.ToString() == guid);
-            situation.AvailableBuffs?.RemoveAll(a => a?.Blueprint?.AssetGuid?.ToString() == guid);
+            RushPlanner.MarkPlanned(situation, rush);
 
             Log.Planning.Info($"[{roleName}] Reckless Rush: {stacks} -> {stacks + RushStacks} Versatility stacks, " +
                 $"{stance}'s 4-stack bonus for the rest of the combat");
