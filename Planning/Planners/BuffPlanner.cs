@@ -957,6 +957,15 @@ namespace CompanionAI_v3.Planning.Planners
                         continue;
                     }
 
+                    // A point-target debuff is cast on the target's position (PlannedAction.Debuff), and the replan
+                    // check tests that point: the unit can pass while the point is out of range
+                    if (CombatAPI.IsPointTargetAbility(debuff)
+                        && !CombatAPI.CanUseAbilityOn(debuff, new TargetWrapper(target.Position), out string pointWhy))
+                    {
+                        Log.Planning.Info($"[{roleName}] Debuff SKIPPED ({pointWhy} at its position): {debuff.Name} -> {target.CharacterName}");
+                        continue;
+                    }
+
                     // 포인트 AoE 착탄 사전 검증 — Debuff 팩토리는 포인트 변환 후 실행/replan 게이트가
                     // 검사하지 않는 Type=Debuff 액션이 되므로, 미검증 시 조용한 헛방으로 AP 낭비 (§15 동일 클래스)
                     if (!CombatAPI.WillPointCastReachTarget(debuff, situation.Unit, target))
